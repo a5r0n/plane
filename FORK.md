@@ -8,7 +8,9 @@
   `squadron_ext`), frontend `packages/squadron` (`@squadron/web`).
 - Upstream files get only minimal hook edits: an import, a registration line, a render site.
   Edit upstream directly where a hook won't do.
-- Every hook line carries a `squadron` marker comment, so `git grep -n squadron` lists them all.
+- Every hook line carries a `squadron` marker comment where the file format allows one, so
+  `git grep -n squadron` lists them. Dockerfiles take only whole-line comments: put `# squadron`
+  on the line above. JSON (`package.json`, the lockfile) takes none: the hook log is the record.
 - Every hook edit is logged below.
 
 ## Hook log
@@ -45,6 +47,10 @@ Branch `rehearsal/thin-hook`: a hook added at upstream `bc2fce4f1b` (2026-08-31)
 | `apps/web/package.json` | `"@squadron/web": "workspace:*"` | clean |
 | `apps/web/.../help-section/root.tsx` | 1 import, 1 render line | **conflict**: upstream moved it out of `core/` and rewrote it on propel (modify/delete) |
 | `pnpm-lock.yaml` | generated | **silently broken**: git merged it with no conflict, `pnpm install --frozen-lockfile` failed |
+
+Markers: the `.py` and `.tsx` hook lines carry `squadron`. Three don't, so `git grep` misses
+them: `COPY ext ext/` in `Dockerfile.api` (written without the line-above marker),
+`apps/web/package.json` and `pnpm-lock.yaml` (JSON, no comments).
 
 **Cost:** 1 textual conflict (2 lines re-applied at the new path), 1 silent lockfile break
 (fixed by taking upstream's lockfile and regenerating: +25 lines, ours only), 0 backend
