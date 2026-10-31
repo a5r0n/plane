@@ -39,6 +39,7 @@
     "@popperjs/core": "catalog:",
     "@react-pdf/renderer": "catalog:",
     "@react-router/node": "catalog:",
+    "@squadron/web": "workspace:*",
     "@tanstack/react-table": "catalog:",
     "axios": "catalog:",
     "clsx": "catalog:",

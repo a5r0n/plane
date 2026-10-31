@@ -8,6 +8,7 @@ import React, { useState } from "react";
 import { observer } from "mobx-react";
 import { HelpCircle, User } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
+import { SquadronMark } from "@squadron/web"; // squadron
 import { PageIcon } from "@plane/propel/icons";
 // ui
 import { CustomMenu } from "@plane/ui";
@@ -85,6 +86,7 @@ export const HelpMenuRoot = observer(function HelpMenuRoot() {
         </CustomMenu.MenuItem>
         <div className="mt-1 border-t border-subtle px-1 pt-2 text-11 text-secondary">
           <PlaneVersionNumber />
+          <SquadronMark /> {/* squadron */}
         </div>
       </CustomMenu>
     </>
