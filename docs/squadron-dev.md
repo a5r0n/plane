@@ -29,7 +29,9 @@ export COMPOSE_FILE=docker-compose-local.yml:docker-compose-squadron.yml
 
 ```bash
 docker compose up -d --build
-until curl -sf -o /dev/null http://127.0.0.1:8000/api/instances/; do sleep 5; done
+for i in $(seq 120); do curl -sf -m 5 -o /dev/null http://127.0.0.1:8000/api/instances/ && break; sleep 5; done
+curl -sf -m 5 -o /dev/null http://127.0.0.1:8000/api/instances/ \
+  || { echo "API did not come up; logs:" >&2; docker compose logs --tail 30 migrator api; false; }
 pnpm turbo run dev --filter=web   # http://localhost:3000, hot reload; add --filter=admin for god-mode
 ```
 
