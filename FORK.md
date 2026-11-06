@@ -35,8 +35,7 @@ for amd64. PRs to `squadron` only build. Pushes publish to `ghcr.io/a5r0n/plane/
 - a push to `squadron` as `squadron` and `sha-<short>`;
 - a release tag as that same tag and `sha-<short>`.
 
-The packages are private, so pulling them needs a `docker login ghcr.io` with a token that can read
-packages.
+The packages are public, so pulling them needs no login.
 
 The proxy has no fork changes, so it stays upstream's image. Upstream's Branch Build CE needs
 Docker Hub secrets the fork doesn't have, so disable it in the repo's Actions settings rather than
