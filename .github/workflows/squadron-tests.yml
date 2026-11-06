@@ -1,0 +1,30 @@
+name: Squadron tests
+
+on:
+  pull_request:
+    branches: [squadron]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Create env file
+        run: |
+          cp apps/api/.env.example apps/api/.env
+          # Tests share one API key, so the default limit fails them by timing (see FORK.md).
+          echo 'API_KEY_RATE_LIMIT="100000/minute"' >> apps/api/.env
+      - name: Run tests
+        run: docker compose -f docker-compose-test.yml up --build --abort-on-container-exit --exit-code-from api-tests
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose-test.yml down -v

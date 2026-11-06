@@ -41,6 +41,24 @@ The proxy has no fork changes, so it stays upstream's image. Upstream's Branch B
 Docker Hub secrets the fork doesn't have, so disable it in the repo's Actions settings rather than
 in the file.
 
+## Backend tests
+
+`.github/workflows/squadron-tests.yml` runs the full Django suite from `docker-compose-test.yml` on
+every PR to `squadron`, as the `Backend tests` check. No test is skipped.
+
+The default `API_KEY_RATE_LIMIT` (`60/minute`) fails these tests at `v1.4.3` with a 429, so the
+workflow raises it in the env file it generates:
+
+- `plane/tests/contract/api/test_projects.py::TestProjectListCreateAPIEndpoint::test_list_relational_order_by_injection_does_not_500`
+- `plane/tests/contract/api/test_projects_lite.py::TestProjectsLite::test_returns_paginated_results`
+- `plane/tests/contract/api/test_projects_lite.py::TestProjectsLite::test_returns_only_lite_fields`
+- `plane/tests/contract/api/test_projects_lite.py::TestProjectsLite::test_archived_excluded_by_default`
+- `plane/tests/contract/api/test_projects_lite.py::TestProjectsLite::test_include_archived_returns_all`
+
+Every `api_key_client` test uses the same token, so they share one throttle bucket in Redis, and
+which tests go over depends on how fast the run is. A local run with the default limit can fail
+others. Set the same value in `apps/api/.env` to match CI.
+
 ## Versions
 
 Versions are `vBASE-squadron.FEATURE.FIX`, for example `v1.4.3-squadron.1.0`. A git tag on
