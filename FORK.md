@@ -39,8 +39,8 @@ The packages are private, so pulling them needs a `docker login ghcr.io` with a 
 packages.
 
 The proxy has no fork changes, so it stays upstream's image. Upstream's Branch Build CE needs
-Docker Hub secrets the fork doesn't have, so it's disabled in the repo's Actions settings rather
-than in the file.
+Docker Hub secrets the fork doesn't have, so disable it in the repo's Actions settings rather than
+in the file.
 
 ## Versions
 
