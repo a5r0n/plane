@@ -1,0 +1,19 @@
+# Override for docker-compose-local.yml; see docs/squadron-dev.md.
+# Fixed project name: every worktree's `up` reuses the one stack.
+name: plane-dev
+
+# Publish ports on loopback only.
+services:
+  plane-redis:
+    ports: !override
+      - "127.0.0.1:6379:6379"
+  plane-minio:
+    ports: !override
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9090:9090"
+  plane-db:
+    ports: !override
+      - "127.0.0.1:5432:5432"
+  api:
+    ports: !override
+      - "127.0.0.1:8000:8000"
