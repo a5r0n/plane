@@ -9,6 +9,7 @@ from contextvars import ContextVar
 
 MODES = ("exclude", "only", "all")
 _mode = ContextVar("squadron_epic_scope", default="all")
+_cache = ContextVar("squadron_epic_scope_cache", default=None)
 
 
 def apply_epic_scope(queryset):
@@ -24,12 +25,18 @@ def current_scope():
     return _mode.get()
 
 
+def scope_cache():
+    """A dict that lives as long as the innermost epic_scope; empty outside one."""
+    return _cache.get() if _cache.get() is not None else {}
+
+
 @contextmanager
 def epic_scope(mode):
     if mode not in MODES:
         raise ValueError(f"unknown epic scope {mode!r}")
-    token = _mode.set(mode)
+    token, cache_token = _mode.set(mode), _cache.set({})
     try:
         yield
     finally:
+        _cache.reset(cache_token)
         _mode.reset(token)

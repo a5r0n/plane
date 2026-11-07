@@ -8,3 +8,8 @@ from django.apps import AppConfig
 class SquadronExtConfig(AppConfig):
     name = "plane.ext"
     label = "squadron_ext"
+
+    def ready(self):
+        from plane.ext.epics.joins import install
+
+        install()

@@ -4,10 +4,12 @@
 
 from django.shortcuts import get_object_or_404
 
+from plane.api.views.project import ProjectSummaryAPIEndpoint
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.views.issue.base import IssueViewSet
-from plane.db.models import Project
+from plane.db.models import Issue, Project, StateGroup
 from plane.ext.epics.epic_type import ensure_epic_type
+from plane.ext.epics.scope import current_scope
 
 
 def stamp_type(request, field, value):
@@ -28,3 +30,14 @@ class EpicViewSet(IssueViewSet):
         project = get_object_or_404(Project, pk=project_id, workspace__slug=slug)
         stamp_type(request, "type", ensure_epic_type(project).id)
         return super().create(request, slug=slug, project_id=project_id)
+
+
+class ProjectSummaryEndpoint(ProjectSummaryAPIEndpoint):
+    """Upstream counts issues on the bare table, past the scope; take the epics back out."""
+
+    def _get_all_summary_counts(self, project_id, requested_fields):
+        counts = super()._get_all_summary_counts(project_id, requested_fields)
+        if "issues" in counts and current_scope() == "exclude":
+            epics = Issue.objects.filter(project_id=project_id, type__is_epic=True)
+            counts["issues"] -= epics.exclude(state__group=StateGroup.TRIAGE.value).count()
+        return counts

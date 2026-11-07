@@ -5,9 +5,10 @@
 from datetime import timedelta
 
 import pytest
+from django.db.models import Count
 from django.utils import timezone
 
-from plane.db.models import Issue
+from plane.db.models import Cycle, CycleIssue, Issue, Module, ModuleIssue, Project
 from plane.db.models.issue_type import IssueType, ProjectIssueType
 from plane.ext.epics.epic_type import ensure_epic_type
 from plane.ext.epics.scope import epic_scope
@@ -63,3 +64,30 @@ def test_two_first_creates_make_one_type(project):
     results = run_in_threads(2, lambda: ensure_epic_type(project).id)
     assert len(set(results)) == 1
     assert IssueType.objects.filter(workspace=project.workspace, is_epic=True).count() == 1
+
+
+def test_exclude_drops_epics_from_counts_over_joins(project, epic, normal, create_user):
+    common = {"project": project, "workspace": project.workspace}
+    cycle = Cycle.objects.create(name="C", owned_by=create_user, **common)
+    module = Module.objects.create(name="M", **common)
+    for issue in (epic, normal):
+        CycleIssue.objects.create(cycle=cycle, issue=issue, **common)
+        ModuleIssue.objects.create(module=module, issue=issue, **common)
+
+    def counts():
+        return (
+            Cycle.objects.annotate(n=Count("issue_cycle__issue__id")).get(pk=cycle.pk).n,
+            Module.objects.annotate(n=Count("issue_module__issue__id")).get(pk=module.pk).n,
+            Project.objects.annotate(n=Count("project_issue")).get(pk=project.pk).n,
+        )
+
+    assert counts() == (2, 2, 2)
+    with epic_scope("exclude"):
+        assert counts() == (1, 1, 1)
+    with epic_scope("only"):
+        assert counts() == (2, 2, 2)
+
+
+def test_exclude_counts_everything_when_no_epic_type_exists(project, normal):
+    with epic_scope("exclude"):
+        assert Project.objects.annotate(n=Count("project_issue")).get(pk=project.pk).n == 1

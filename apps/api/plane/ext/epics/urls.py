@@ -13,10 +13,13 @@ from django.urls.resolvers import RoutePattern
 from plane.db.models import Issue
 from plane.ext.epics import routes
 from plane.ext.epics.scope import epic_scope
-from plane.ext.epics.views import EpicViewSet
+from plane.ext.epics.views import EpicViewSet, ProjectSummaryEndpoint
 
 # url modules in the order plane/urls.py mounts them under api/
 SOURCES = (("", "plane.app.urls"), ("public/", "plane.space.urls"), ("v1/", "plane.api.urls"))
+
+# hidden routes whose upstream view counts past the scope: route -> the view that doesn't
+REPLACED = {routes.V1 + routes.P + "summary/": ProjectSummaryEndpoint.as_view()}
 
 
 def walk(patterns, prefix=""):
@@ -130,7 +133,7 @@ def epic_patterns(own=()):
         for route in routes.MARKED
     ]
     patterns += [
-        path(route, hide_get(table[route].callback, route), name=f"hide-{table[route].name}")
+        path(route, hide_get(REPLACED.get(route, table[route].callback), route), name=f"hide-{table[route].name}")
         for route in sorted(routes.HIDE)
     ]
     return patterns
