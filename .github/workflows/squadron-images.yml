@@ -23,12 +23,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { image: backend, context: ./apps/api, dockerfile: ./apps/api/Dockerfile.api }
-          - { image: frontend, context: ., dockerfile: ./apps/web/Dockerfile.web }
-          - { image: admin, context: ., dockerfile: ./apps/admin/Dockerfile.admin }
-          - { image: space, context: ., dockerfile: ./apps/space/Dockerfile.space }
-          - { image: live, context: ., dockerfile: ./apps/live/Dockerfile.live }
+        # on PRs the E2E job builds backend and live, so nothing builds twice
+        image: ${{ fromJSON(github.event_name == 'push' && '["backend","frontend","admin","space","live"]' || '["frontend","admin","space"]') }}
     steps:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v4
@@ -48,11 +44,68 @@ jobs:
             type=sha
       - uses: docker/build-push-action@v7
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          context: ${{ matrix.image == 'backend' && './apps/api' || '.' }}
+          file: ${{ matrix.image == 'backend' && './apps/api/Dockerfile.api' || format('./apps/{0}/Dockerfile.{0}', matrix.image == 'frontend' && 'web' || matrix.image) }}
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  # Builds backend and live for the PR, then runs tests/e2e against them; see FORK.md (E2E).
+  e2e:
+    name: E2E
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE: docker compose -f docker-compose-e2e.yml
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check whether the PR touches the stack
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE"
+          if git diff --name-only "$BASE" HEAD | grep -qE '^(apps/api/|apps/live/|packages/|tests/e2e/|docker-compose-e2e\.yml$|pnpm-lock\.yaml$|\.github/workflows/squadron-images\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No stack paths changed: building images only." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: docker/setup-buildx-action@v4
+      - name: Build backend and live
+        uses: docker/bake-action@v7
+        with:
+          source: .
+          files: docker-compose-e2e.yml
+          targets: migrator,live
+          load: ${{ steps.scope.outputs.run == 'true' }}
+          set: |
+            *.platform=linux/amd64
+            migrator.cache-from=type=gha,scope=backend
+            migrator.cache-to=type=gha,mode=max,scope=backend
+            live.cache-from=type=gha,scope=live
+            live.cache-to=type=gha,mode=max,scope=live
+      - name: Start the stack
+        if: steps.scope.outputs.run == 'true'
+        run: $COMPOSE up -d --no-build
+      - uses: actions/setup-node@v6
+        if: steps.scope.outputs.run == 'true'
+        with:
+          node-version: "22.18.0"
+      - uses: astral-sh/setup-uv@v10
+        if: steps.scope.outputs.run == 'true'
+      - name: Install the suite
+        if: steps.scope.outputs.run == 'true'
+        run: corepack enable pnpm && pnpm install --frozen-lockfile --filter @plane/e2e...
+      - name: Wait for the stack
+        if: steps.scope.outputs.run == 'true'
+        run: $COMPOSE up -d --no-build --wait --wait-timeout 300
+      - name: Run the suite
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm --filter @plane/e2e test
+      - name: Stack logs
+        if: failure() && steps.scope.outputs.run == 'true'
+        run: $COMPOSE logs --no-color --tail 300
