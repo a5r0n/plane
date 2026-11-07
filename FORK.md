@@ -39,6 +39,7 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 | `apps/web/core/components/workspace/sidebar/project-navigation.tsx`           | Epics item in the project sidebar                   | Epics page                       |
 | `apps/web/core/store/issue/project/issue.store.ts`                            | Optional `serviceType` constructor argument         | Epics list uses `epics/`         |
 | `apps/web/core/store/issue/root.store.ts`                                     | `projectEpics` built with `EIssueServiceType.EPICS` | Epics list uses `epics/`         |
+| `apps/web/core/store/issue/issue-details/issue.store.ts`                      | `/browse` loads epics into `issueDetail`            | Epic detail fills its widgets    |
 | `apps/web/core/components/epic-modal/modal.tsx`                               | Name-only create form in upstream's empty stub      | Epic create                      |
 | `apps/web/core/components/issues/issue-layouts/empty-states/project-epic.tsx` | Empty state in upstream's empty stub                | No blank epics page              |
 
