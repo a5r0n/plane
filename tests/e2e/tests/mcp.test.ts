@@ -28,6 +28,20 @@ describe("the Plane MCP server against the fork", () => {
     expect(projects.map((project) => project.id)).toContain(stack.projectId);
   });
 
+  it("filters work items with PQL on the server", async () => {
+    const make = (name: string, priority: string) =>
+      mcp.tool<{ id: string }>("workitem", { action: "create", project_id: stack.projectId, name, priority });
+    const urgent = await make("PQL urgent", "urgent");
+    await make("PQL low", "low");
+
+    const listed = await mcp.tool<{ results?: { id: string }[] } | { error: string }>("workitem", {
+      action: "list",
+      project_id: stack.projectId,
+      pql: 'priority = "urgent" AND title ~ "pql"',
+    });
+    expect("results" in listed ? listed.results?.map((item) => item.id) : listed).toEqual([urgent.id]);
+  });
+
   it("creates and rewrites a page that an open editor follows", async () => {
     const created = await mcp.tool<Page>("page", {
       action: "create",
