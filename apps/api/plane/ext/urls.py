@@ -4,6 +4,7 @@
 
 from django.urls import path
 
+from plane.ext.epics.urls import epic_patterns
 from plane.ext.pages import ProjectPageAPIEndpoint
 from plane.ext.relations import WorkItemRelationRemoveEndpoint
 from plane.ext.search import WorkItemSearchEndpoint
@@ -40,3 +41,6 @@ urlpatterns = [
         name="squadron-work-item-relation-remove",
     ),
 ]
+
+# epic routes and list shadows resolve before ours and upstream's
+urlpatterns = epic_patterns(urlpatterns) + urlpatterns
