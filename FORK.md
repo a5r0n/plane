@@ -64,6 +64,17 @@ first within each, and each carries `matched`: `title`, `description` or `commen
 and membership rules are upstream's. The matching is an unindexed `icontains` scan. Session search
 and the web app's search are unchanged.
 
+## Relations API
+
+`plane.ext` adds the route `plane_sdk`'s `work_items.relations.delete` calls, which upstream's v1 API
+lacks: `POST workspaces/<slug>/projects/<id>/work-items/<id>/relations/remove/` with
+`{"related_issue": "<work item id>"}`. It subclasses upstream's `IssueRelationViewSet`, keeping its
+permissions (`ProjectEntityPermission`: project members and admins) with API-key auth. A pair of work
+items holds one stored relation, so removing it from either item removes it from both, and the
+activity on both items records the removal. The relation type is read from the stored relation, so
+callers send only `related_issue`. It answers 204, 400 without a valid `related_issue`, and 404 when
+the work item isn't in the project or the pair has no relation.
+
 ## Images
 
 `.github/workflows/squadron-images.yml` builds `backend`, `frontend`, `admin`, `space` and `live`

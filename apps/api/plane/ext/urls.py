@@ -5,6 +5,7 @@
 from django.urls import path
 
 from plane.ext.pages import ProjectPageAPIEndpoint
+from plane.ext.relations import WorkItemRelationRemoveEndpoint
 from plane.ext.search import WorkItemSearchEndpoint
 
 PAGES = "v1/workspaces/<str:slug>/projects/<uuid:project_id>/pages/"
@@ -32,5 +33,10 @@ urlpatterns = [
         "v1/workspaces/<str:slug>/issues/search/",
         WorkItemSearchEndpoint.as_view(http_method_names=["get"]),
         name="squadron-issue-search",
+    ),
+    path(
+        "v1/workspaces/<str:slug>/projects/<uuid:project_id>/work-items/<uuid:issue_id>/relations/remove/",
+        WorkItemRelationRemoveEndpoint.as_view({"post": "remove_relation"}),
+        name="squadron-work-item-relation-remove",
     ),
 ]
