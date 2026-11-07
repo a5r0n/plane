@@ -1,0 +1,133 @@
+# Throwaway stack for the E2E suite in tests/e2e; see FORK.md (E2E).
+#   docker compose -f docker-compose-e2e.yml up -d --build --wait
+# CI loads the images it already built under these tags, so nothing builds twice.
+name: plane-e2e
+
+x-api-env: &api-env
+  SECRET_KEY: e2e-secret-key
+  DEBUG: "0"
+  DATABASE_URL: postgresql://plane:plane@db:5432/plane
+  REDIS_URL: redis://redis:6379/
+  RABBITMQ_HOST: mq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: plane
+  RABBITMQ_PASSWORD: plane
+  RABBITMQ_VHOST: plane
+  WEB_URL: http://localhost:3000
+  CORS_ALLOWED_ORIGINS: http://localhost:3000
+  LIVE_BASE_URL: http://live:3000
+  LIVE_BASE_PATH: /live/
+  LIVE_SERVER_SECRET_KEY: e2e-live-secret
+  API_KEY_RATE_LIMIT: 100000/minute
+  GUNICORN_WORKERS: "2"
+  USE_MINIO: "0"
+
+services:
+  db:
+    image: postgres:15.7-alpine
+    environment:
+      POSTGRES_USER: plane
+      POSTGRES_PASSWORD: plane
+      POSTGRES_DB: plane
+    # durability off: a throwaway db only needs speed
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plane -d plane"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: valkey/valkey:7.2.11-alpine
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # the API queues celery tasks on page writes; no worker consumes them here
+  mq:
+    image: rabbitmq:3.13.6-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: plane
+      RABBITMQ_DEFAULT_PASS: plane
+      RABBITMQ_DEFAULT_VHOST: plane
+    tmpfs:
+      - /var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 40
+
+  migrator:
+    image: ${E2E_BACKEND_IMAGE:-plane-e2e/backend:local}
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.api
+    environment: *api-env
+    command: ["python", "manage.py", "migrate", "--no-input"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    image: ${E2E_BACKEND_IMAGE:-plane-e2e/backend:local}
+    environment: *api-env
+    # upstream's entrypoint minus the bucket and static steps, which need MinIO
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        python manage.py register_instance e2e
+        python manage.py configure_instance
+        python manage.py clear_cache
+        exec gunicorn -w "$$GUNICORN_WORKERS" -k uvicorn.workers.UvicornWorker plane.asgi:application --bind 0.0.0.0:8000
+    ports:
+      - "127.0.0.1:${E2E_API_PORT:-18000}:8000"
+    healthcheck:
+      test:
+        ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/instances/')"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      mq:
+        condition: service_healthy
+
+  live:
+    image: ${E2E_LIVE_IMAGE:-plane-e2e/live:local}
+    build:
+      context: .
+      dockerfile: ./apps/live/Dockerfile.live
+    environment:
+      PORT: "3000"
+      API_BASE_URL: http://api:8000
+      LIVE_BASE_PATH: /live
+      LIVE_SERVER_SECRET_KEY: e2e-live-secret
+      REDIS_URL: redis://redis:6379/
+    ports:
+      - "127.0.0.1:${E2E_LIVE_PORT:-13100}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/live/health/').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    depends_on:
+      redis:
+        condition: service_healthy
