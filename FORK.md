@@ -91,6 +91,17 @@ activity on both items records the removal. The relation type is read from the s
 callers send only `related_issue`. It answers 204, 400 without a valid `related_issue`, and 404 when
 the work item isn't in the project or the pair has no relation.
 
+## Read-only identities
+
+`SQUADRON_READ_ONLY_USER_IDS` (env on the API, comma-separated user ids) makes those users
+read-only on the v1 API: with any of their API tokens, GET, HEAD and OPTIONS work as before, and
+every other method answers 403 `{"detail": "This identity is read-only."}` before the view runs,
+so nothing is written. Plane's project roles can't express this: a Guest can still comment.
+
+`plane/ext/readonly.py` wraps `APIKeyAuthentication.authenticate` at app start (no upstream
+edit). Unset or empty, it changes nothing. It covers API-key requests only: the user's web
+session, if it has one, can still write.
+
 ## Epics
 
 An epic is a work item whose type has `is_epic` set. `plane.ext` creates one `Epic` type per
@@ -200,6 +211,8 @@ API token, project), then checks cross-service flows:
   (same URL, token and cookie as the web editor).
 - `tests/mcp.test.ts`: a smoke run of `plane-mcp-server`, pinned by SHA in `src/mcp.ts`, over
   stdio.
+- `tests/readonly.test.ts`: the user the migrator seeds, listed in `SQUADRON_READ_ONLY_USER_IDS`,
+  reads over the v1 API and is refused every write.
 
 Add a flow as a new `tests/<area>.test.ts`; `inject("stack")` gives it the user, workspace,
 project and API key. To run it locally (needs Node, pnpm and `uv`):

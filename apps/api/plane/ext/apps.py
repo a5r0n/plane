@@ -10,6 +10,8 @@ class SquadronExtConfig(AppConfig):
     label = "squadron_ext"
 
     def ready(self):
-        from plane.ext.epics.joins import install
+        from plane.ext.epics.joins import install as install_epic_joins
+        from plane.ext.readonly import install as install_read_only
 
-        install()
+        install_epic_joins()
+        install_read_only()

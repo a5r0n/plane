@@ -21,6 +21,8 @@ x-api-env: &api-env
   API_KEY_RATE_LIMIT: 100000/minute
   GUNICORN_WORKERS: "2"
   USE_MINIO: "0"
+  # the read-only user the migrator seeds; tests/e2e/tests/readonly.test.ts
+  SQUADRON_READ_ONLY_USER_IDS: 00000000-0000-4000-8000-00000000e2e0
 
 services:
   db:
@@ -70,7 +72,24 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile.api
     environment: *api-env
-    command: ["python", "manage.py", "migrate", "--no-input"]
+    # also seeds the read-only user, whose id the API must know at start
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        python manage.py migrate --no-input
+        python manage.py shell -c '
+        from plane.db.models import Profile, User
+        user, created = User.objects.get_or_create(
+            id="00000000-0000-4000-8000-00000000e2e0",
+            defaults={"email": "readonly@plane.local", "username": "e2e-readonly", "is_password_autoset": False},
+        )
+        if created:
+            user.set_password("Plane-e2e-correct-horse-42")
+            user.save()
+            Profile.objects.create(user=user)
+        '
     depends_on:
       db:
         condition: service_healthy

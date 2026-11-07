@@ -57,12 +57,17 @@ export class ApiClient {
     readonly workspaceSlug: string
   ) {}
 
-  async call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const response = await fetch(new URL(`/api/v1/workspaces/${this.workspaceSlug}/${path}`, API_URL), {
+  /** The raw response, for callers that check a refusal. */
+  send(method: string, path: string, body?: unknown): Promise<Response> {
+    return fetch(new URL(`/api/v1/workspaces/${this.workspaceSlug}/${path}`, API_URL), {
       method,
       headers: { "x-api-key": this.apiKey, "content-type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+  }
+
+  async call<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const response = await this.send(method, path, body);
     if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
     return (response.status === 204 ? undefined : await response.json()) as T;
   }
