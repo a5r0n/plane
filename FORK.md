@@ -18,32 +18,20 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 - Every hook line carries a `squadron` marker comment where the file format allows one, so
   `git grep -n squadron` lists them. Dockerfiles take only whole-line comments: put `# squadron`
   on the line above. JSON (`package.json`, the lockfile) takes none: the hook log is the record.
-- Every hook edit is logged below.
+- Every hook edit is logged in `fork/hooks/` (below).
 
 ## Hook log
 
-| Upstream file                                                                 | Edit                                                | Why                              |
-| ----------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------- |
-| `apps/api/plane/settings/common.py`                                           | `plane.ext` in `INSTALLED_APPS`                     | Registers our app                |
-| `apps/api/plane/urls.py`                                                      | `plane.ext.urls` mounted at `api/`, first           | Our routes win over upstream's   |
-| `.github/workflows/pull-request-build-lint-api.yml`                           | `squadron` in `pull_request.branches`               | PR checks on our base            |
-| `.github/workflows/pull-request-build-lint-web-apps.yml`                      | `squadron` in `pull_request.branches`               | PR checks on our base            |
-| `.github/workflows/react-doctor.yml`                                          | job `if` skips draft PRs                            | Drafts spend no CI               |
-| `apps/live/src/controllers/index.ts`                                          | `SquadronPageContentController` in `CONTROLLERS`    | Registers the page content route |
-| `apps/api/plane/bgtasks/page_version_task.py`                                 | `page.description` → `page.description_json`        | Upstream bug: page versions fail |
-| `apps/api/plane/db/models/issue.py`                                           | `apply_epic_scope` import; `IssueManager` via it    | Epic scope on `issue_objects`    |
-| `apps/api/plane/app/serializers/issue.py`                                     | `type_id` in `IssueSerializer` fields               | Clients tell epics apart         |
-| `apps/api/plane/utils/grouper.py`                                             | `type_id` in `required_fields`                      | Clients tell epics apart         |
-| `apps/api/plane/app/views/issue/base.py`                                      | `type_id` in three `.values()` lists                | Clients tell epics apart         |
-| `apps/api/plane/app/views/issue/sub_issue.py`                                 | `type_id` in the sub-issue `.values()`              | Clients tell epics apart         |
-| `apps/web/app/routes/extended.ts`                                             | Epics route nested in core's layout chain           | Epics page                       |
-| `apps/web/core/components/workspace/sidebar/project-navigation.tsx`           | Epics item in the project sidebar                   | Epics page                       |
-| `apps/web/core/store/issue/project/issue.store.ts`                            | Optional `serviceType` constructor argument         | Epics list uses `epics/`         |
-| `apps/web/core/store/issue/root.store.ts`                                     | `projectEpics` built with `EIssueServiceType.EPICS` | Epics list uses `epics/`         |
-| `apps/web/core/store/issue/issue-details/issue.store.ts`                      | `/browse` loads epics into `issueDetail`            | Epic detail fills its widgets    |
-| `apps/web/core/components/epic-modal/modal.tsx`                               | Name-only create form in upstream's empty stub      | Epic create                      |
-| `apps/web/core/components/issues/issue-layouts/empty-states/project-epic.tsx` | Empty state in upstream's empty stub                | No blank epics page              |
-| `pnpm-workspace.yaml`                                                         | `tests/e2e` in `packages`                           | Makes the E2E suite a package    |
+Each hooked upstream file has its own log file at `fork/hooks/<upstream path>.md`, for example
+`fork/hooks/apps/api/plane/urls.py.md` for `apps/api/plane/urls.py`. It says what the edit is
+(**Edit:**) and why it's there (**Why:**). One file per hook keeps fork PRs from conflicting: two
+PRs that hook different files add different log files. A second hook in a file already logged adds
+a line to that file's log.
+
+[`fork/hooks/`](fork/hooks/) is the log. `fork/check-hooks.sh` fails if a file outside our own dirs
+has a `squadron` marker comment but no log file, or if a log file names a file that no longer
+exists. The `Hook log` check (`.github/workflows/squadron-fork.yml`) runs it on every non-draft PR
+to `squadron`. Files that take no marker (JSON) are logged by hand; the script can't see them.
 
 ## Pages API
 
@@ -101,6 +89,28 @@ so nothing is written. Plane's project roles can't express this: a Guest can sti
 `plane/ext/readonly.py` wraps `APIKeyAuthentication.authenticate` at app start (no upstream
 edit). Unset or empty, it changes nothing. It covers API-key requests only: the user's web
 session, if it has one, can still write.
+
+## PQL filtering
+
+`plane.ext` shadows the v1 project work item list (`workspaces/<slug>/projects/<id>/work-items/` and
+the legacy `.../issues/`) with `plane/ext/work_items.py`, so `?pql=` filters on the server. Upstream
+CE refuses any `pql`. The query is compiled by `plane/ext/pql.py`, a subset of Plane's PQL:
+
+- fields: `priority`, `stateGroup`, `state`, `assignee`, `label`, `createdBy`, `project`, `parent`
+  (UUIDs where Plane takes ids), `title` (`~` only), and the dates `dueDate`, `startDate`,
+  `createdAt`, `updatedAt`;
+- operators: `=`, `!=`, `IN (...)`, `NOT IN (...)`, `~` (contains, case-insensitive),
+  `<`, `<=`, `>`, `>=` (dates only), `IS NULL`, `IS NOT NULL`, with `AND`, `OR`, `NOT` and
+  parentheses. Keywords are case-insensitive; strings take either quote;
+- functions: `currentUser()`, `openStates()`, `closedStates()`, `activeStates()`, `today()`,
+  `daysAgo(n)`, `daysFromNow(n)`, and the predicates `hasNoAssignee()`, `hasNoLabel()`,
+  `isTopLevel()` and `childOf("KEY-N")` (or a UUID).
+
+Anything else (other fields, `BETWEEN`, cycles, relation and other functions) answers 400 with
+`{"pql": "Invalid PQL: <what>"}`; nothing is silently ignored. Paging, ordering, `fields`,
+permissions and epic hiding are upstream's, and `total_count` counts the filtered set. Assignee and
+label match current links only (soft-deleted ones don't count). Structured `filters=` is still
+refused. There is no workspace-wide list or count on CE, so those still fail.
 
 ## Epics
 
@@ -249,4 +259,4 @@ pnpm install --frozen-lockfile   # must pass
 ```
 
 Then re-apply any hook whose upstream file moved (`git status` shows modify/delete), run the
-checks, and update the hook log.
+checks, and update the hook log (`fork/check-hooks.sh` flags logs whose file moved).
