@@ -6,7 +6,8 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 ## Rules
 
 - Our code lives in our own dirs: backend `apps/api/plane/ext/` (Django app `plane.ext`, label
-  `squadron_ext`), frontend `apps/web/core/components/squadron/`, because web code needs the `@/`
+  `squadron_ext`), frontend `apps/web/core/components/squadron/` plus route modules under
+  `apps/web/app/(all)/...` (registered in `app/routes/extended.ts`), because web code needs the `@/`
   stores, which a separate package can't reach, and live server `apps/live/src/squadron/`. The
   backend dir sits inside `plane/` so the prod image (which copies only `plane/`) needs no
   `Dockerfile.api` hook.
@@ -21,19 +22,26 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 
 ## Hook log
 
-| Upstream file                                            | Edit                                             | Why                              |
-| -------------------------------------------------------- | ------------------------------------------------ | -------------------------------- |
-| `apps/api/plane/settings/common.py`                      | `plane.ext` in `INSTALLED_APPS`                  | Registers our app                |
-| `apps/api/plane/urls.py`                                 | `plane.ext.urls` mounted at `api/`, first        | Our routes win over upstream's   |
-| `.github/workflows/pull-request-build-lint-api.yml`      | `squadron` in `pull_request.branches`            | PR checks on our base            |
-| `.github/workflows/pull-request-build-lint-web-apps.yml` | `squadron` in `pull_request.branches`            | PR checks on our base            |
-| `apps/live/src/controllers/index.ts`                     | `SquadronPageContentController` in `CONTROLLERS` | Registers the page content route |
-| `apps/api/plane/bgtasks/page_version_task.py`            | `page.description` → `page.description_json`     | Upstream bug: page versions fail |
-| `apps/api/plane/db/models/issue.py`                      | `apply_epic_scope` import; `IssueManager` via it | Epic scope on `issue_objects`    |
-| `apps/api/plane/app/serializers/issue.py`                | `type_id` in `IssueSerializer` fields            | Clients tell epics apart         |
-| `apps/api/plane/utils/grouper.py`                        | `type_id` in `required_fields`                   | Clients tell epics apart         |
-| `apps/api/plane/app/views/issue/base.py`                 | `type_id` in three `.values()` lists             | Clients tell epics apart         |
-| `apps/api/plane/app/views/issue/sub_issue.py`            | `type_id` in the sub-issue `.values()`           | Clients tell epics apart         |
+| Upstream file                                                                 | Edit                                                | Why                              |
+| ----------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------- |
+| `apps/api/plane/settings/common.py`                                           | `plane.ext` in `INSTALLED_APPS`                     | Registers our app                |
+| `apps/api/plane/urls.py`                                                      | `plane.ext.urls` mounted at `api/`, first           | Our routes win over upstream's   |
+| `.github/workflows/pull-request-build-lint-api.yml`                           | `squadron` in `pull_request.branches`               | PR checks on our base            |
+| `.github/workflows/pull-request-build-lint-web-apps.yml`                      | `squadron` in `pull_request.branches`               | PR checks on our base            |
+| `apps/live/src/controllers/index.ts`                                          | `SquadronPageContentController` in `CONTROLLERS`    | Registers the page content route |
+| `apps/api/plane/bgtasks/page_version_task.py`                                 | `page.description` → `page.description_json`        | Upstream bug: page versions fail |
+| `apps/api/plane/db/models/issue.py`                                           | `apply_epic_scope` import; `IssueManager` via it    | Epic scope on `issue_objects`    |
+| `apps/api/plane/app/serializers/issue.py`                                     | `type_id` in `IssueSerializer` fields               | Clients tell epics apart         |
+| `apps/api/plane/utils/grouper.py`                                             | `type_id` in `required_fields`                      | Clients tell epics apart         |
+| `apps/api/plane/app/views/issue/base.py`                                      | `type_id` in three `.values()` lists                | Clients tell epics apart         |
+| `apps/api/plane/app/views/issue/sub_issue.py`                                 | `type_id` in the sub-issue `.values()`              | Clients tell epics apart         |
+| `apps/web/app/routes/extended.ts`                                             | Epics route nested in core's layout chain           | Epics page                       |
+| `apps/web/core/components/workspace/sidebar/project-navigation.tsx`           | Epics item in the project sidebar                   | Epics page                       |
+| `apps/web/core/store/issue/project/issue.store.ts`                            | Optional `serviceType` constructor argument         | Epics list uses `epics/`         |
+| `apps/web/core/store/issue/root.store.ts`                                     | `projectEpics` built with `EIssueServiceType.EPICS` | Epics list uses `epics/`         |
+| `apps/web/core/store/issue/issue-details/issue.store.ts`                      | `/browse` loads epics into `issueDetail`            | Epic detail fills its widgets    |
+| `apps/web/core/components/epic-modal/modal.tsx`                               | Name-only create form in upstream's empty stub      | Epic create                      |
+| `apps/web/core/components/issues/issue-layouts/empty-states/project-epic.tsx` | Empty state in upstream's empty stub                | No blank epics page              |
 
 ## Pages API
 
@@ -122,6 +130,11 @@ How the hiding works, for anyone merging upstream:
   on any route that shows it or whose numbers move, unless the tables in `routes.py` name it. Run it
   after moving to a new base: new upstream routes land there.
 
+Web: an Epics entry in the project sidebar opens `projects/<id>/epics`, which renders upstream's
+five layouts against the `projectEpics` store (`apps/web/core/components/squadron/epics/`). "Add
+epic" and the empty state open a name-only create form. An epic opens on the normal
+`/browse/KEY-N` page, which picks the epic view from `is_epic`.
+
 Notifications, exports and webhooks treat an epic as a work item: subscribers are notified, exports
 include it as a row, and `issue` webhooks fire with `type` set to the epic type's id.
 
@@ -132,6 +145,10 @@ Known limits:
 - the project detail routes (`projects/<id>/`, `projects/details/`) count epics in
   `next_work_item_sequence`, since epics take sequence numbers;
 - exports have no type column, so an epic can't be told from a work item there.
+- the epics page shares its layout and display filters with the work items page, so changing one
+  changes the other;
+- on the epics page, breadcrumbs say "Work Items" and quick-add rows say "work item";
+- "Add existing" on an epic offers other epics, so epics can nest.
 
 ## Images
 
