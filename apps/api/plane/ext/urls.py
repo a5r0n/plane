@@ -8,10 +8,20 @@ from plane.ext.epics.urls import epic_patterns
 from plane.ext.pages import ProjectPageAPIEndpoint
 from plane.ext.relations import WorkItemRelationRemoveEndpoint
 from plane.ext.search import WorkItemSearchEndpoint
+from plane.ext.work_items import WorkItemListCreateAPIEndpoint
 
-PAGES = "v1/workspaces/<str:slug>/projects/<uuid:project_id>/pages/"
+PROJECT = "v1/workspaces/<str:slug>/projects/<uuid:project_id>/"
+PAGES = PROJECT + "pages/"
 
 urlpatterns = [
+    *(
+        path(
+            PROJECT + tail,
+            WorkItemListCreateAPIEndpoint.as_view(http_method_names=["get", "post"]),
+            name=f"squadron-{tail.strip('/')}-list",
+        )
+        for tail in ("work-items/", "issues/")
+    ),
     path(PAGES, ProjectPageAPIEndpoint.as_view({"get": "list", "post": "create"}), name="squadron-project-pages"),
     path(
         PAGES + "<uuid:page_id>/",

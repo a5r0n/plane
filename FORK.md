@@ -91,6 +91,28 @@ activity on both items records the removal. The relation type is read from the s
 callers send only `related_issue`. It answers 204, 400 without a valid `related_issue`, and 404 when
 the work item isn't in the project or the pair has no relation.
 
+## PQL filtering
+
+`plane.ext` shadows the v1 project work item list (`workspaces/<slug>/projects/<id>/work-items/` and
+the legacy `.../issues/`) with `plane/ext/work_items.py`, so `?pql=` filters on the server. Upstream
+CE refuses any `pql`. The query is compiled by `plane/ext/pql.py`, a subset of Plane's PQL:
+
+- fields: `priority`, `stateGroup`, `state`, `assignee`, `label`, `createdBy`, `project`, `parent`
+  (UUIDs where Plane takes ids), `title` (`~` only), and the dates `dueDate`, `startDate`,
+  `createdAt`, `updatedAt`;
+- operators: `=`, `!=`, `IN (...)`, `NOT IN (...)`, `~` (contains, case-insensitive),
+  `<`, `<=`, `>`, `>=` (dates only), `IS NULL`, `IS NOT NULL`, with `AND`, `OR`, `NOT` and
+  parentheses. Keywords are case-insensitive; strings take either quote;
+- functions: `currentUser()`, `openStates()`, `closedStates()`, `activeStates()`, `today()`,
+  `daysAgo(n)`, `daysFromNow(n)`, and the predicates `hasNoAssignee()`, `hasNoLabel()`,
+  `isTopLevel()` and `childOf("KEY-N")` (or a UUID).
+
+Anything else (other fields, `BETWEEN`, cycles, relation and other functions) answers 400 with
+`{"pql": "Invalid PQL: <what>"}`; nothing is silently ignored. Paging, ordering, `fields`,
+permissions and epic hiding are upstream's, and `total_count` counts the filtered set. Assignee and
+label match current links only (soft-deleted ones don't count). Structured `filters=` is still
+refused. There is no workspace-wide list or count on CE, so those still fail.
+
 ## Epics
 
 An epic is a work item whose type has `is_epic` set. `plane.ext` creates one `Epic` type per
