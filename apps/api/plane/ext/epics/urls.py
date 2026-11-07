@@ -13,7 +13,13 @@ from django.urls.resolvers import RoutePattern
 from plane.db.models import Issue
 from plane.ext.epics import routes
 from plane.ext.epics.scope import epic_scope
-from plane.ext.epics.views import EpicViewSet, ProjectSummaryEndpoint
+from plane.ext.epics.views import (
+    EpicChildrenAPIEndpoint,
+    EpicDetailAPIEndpoint,
+    EpicListCreateAPIEndpoint,
+    EpicViewSet,
+    ProjectSummaryEndpoint,
+)
 
 # url modules in the order plane/urls.py mounts them under api/
 SOURCES = (("", "plane.app.urls"), ("public/", "plane.space.urls"), ("v1/", "plane.api.urls"))
@@ -125,6 +131,17 @@ def epic_patterns(own=()):
             routes.P + "epics/",
             scoped(EpicViewSet.as_view({"get": "list", "post": "create"}), "all", mark=True),
             name="squadron-epics",
+        ),
+        path(routes.V1 + routes.P + "epics/", EpicListCreateAPIEndpoint.as_view(), name="squadron-v1-epics"),
+        path(
+            routes.V1 + routes.P + "epics/<uuid:pk>/",
+            EpicDetailAPIEndpoint.as_view(http_method_names=["get"]),
+            name="squadron-v1-epic",
+        ),
+        path(
+            routes.V1 + routes.P + "epics/<uuid:pk>/issues/",
+            EpicChildrenAPIEndpoint.as_view(),
+            name="squadron-v1-epic-issues",
         ),
         *alias_patterns(table),
     ]
