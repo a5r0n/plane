@@ -137,7 +137,8 @@ Known limits:
 ## Images
 
 `.github/workflows/squadron-images.yml` builds `backend`, `frontend`, `admin`, `space` and `live`
-for amd64. PRs to `squadron` only build, and skip while draft (marking one ready builds it). Pushes publish to `ghcr.io/a5r0n/plane/<image>`:
+for amd64. PRs to `squadron` only build, and skip while draft (marking one ready builds it).
+Pushes publish to `ghcr.io/a5r0n/plane/<image>`:
 
 - a push to `squadron` as `squadron` and `sha-<short>`;
 - a release tag as that same tag and `sha-<short>`.
