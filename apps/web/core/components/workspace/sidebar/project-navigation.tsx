@@ -81,6 +81,17 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         sortOrder: 1,
       },
       {
+        // squadron
+        i18n_key: "sidebar.epics",
+        key: "epics",
+        name: "Epics",
+        href: `/${workspaceSlug}/projects/${projectId}/epics`,
+        icon: WorkItemsIcon,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 1.5,
+      },
+      {
         i18n_key: "sidebar.cycles",
         key: "cycles",
         name: "Cycles",
