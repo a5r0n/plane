@@ -45,6 +45,9 @@ export type TPageContentInput = {
   name?: string | null;
   // base64 state the API holds, used when no live copy of the page is loaded
   storedBinary?: string | null;
+  // the page's HTML and name, used to build the state when it has no stored binary yet
+  storedHTML?: string | null;
+  storedName?: string | null;
 };
 
 export type TPageContentResult = TDocumentPayload & { loaded: boolean };
@@ -65,11 +68,14 @@ const getLoadedDocument = async (instance: Hocuspocus, pageId: string): Promise<
 /** Writes new content into the page's live doc if loaded, otherwise into the stored state. */
 export const writePageContent = async (
   instance: Hocuspocus,
-  { pageId, descriptionHTML, name, storedBinary }: TPageContentInput
+  { pageId, descriptionHTML, name, storedBinary, storedHTML, storedName }: TPageContentInput
 ): Promise<TPageContentResult> => {
   const loaded = await getLoadedDocument(instance, pageId);
   const doc = loaded ?? new Y.Doc();
   if (!loaded && storedBinary) Y.applyUpdate(doc, new Uint8Array(convertBase64StringToBinaryData(storedBinary)));
+  // same fallback as live's own load path for a page never opened in the editor
+  else if (!loaded && storedHTML != null)
+    Y.applyUpdate(doc, getBinaryDataFromDocumentEditorHTMLString(storedHTML, storedName ?? undefined));
 
   replacePageContent(doc, descriptionHTML, name);
 

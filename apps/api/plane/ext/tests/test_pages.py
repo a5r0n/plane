@@ -188,6 +188,8 @@ class TestUpdate:
             "description_html": "<p>new</p>",
             "name": None,
             "description_binary": base64.b64encode(b"stored").decode(),
+            "stored_html": None,
+            "stored_name": None,
         }
 
         page.refresh_from_db()
@@ -205,6 +207,17 @@ class TestUpdate:
         assert response.status_code == status.HTTP_200_OK
         assert json.loads(post.call_args.kwargs["data"])["name"] == "Renamed"
         assert Page.objects.get(pk=page.id).name == "Renamed"
+
+    def test_rename_without_stored_binary_sends_the_body(self, api_key_client, project, create_user):
+        page = make_page(project, create_user, html="<p>keep me</p>")
+        assert page.description_binary is None
+        with mock.patch("plane.ext.pages.requests.post", return_value=live_reply("<p>keep me</p>")) as post:
+            response = api_key_client.patch(page_url(project, page), {"name": "Renamed"}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        sent = json.loads(post.call_args.kwargs["data"])
+        assert sent["description_html"] is None
+        assert sent["description_binary"] is None
+        assert (sent["stored_html"], sent["stored_name"]) == ("<p>keep me</p>", "Doc")
 
     def test_other_fields_skip_live(self, api_key_client, project, create_user):
         page = make_page(project, create_user)

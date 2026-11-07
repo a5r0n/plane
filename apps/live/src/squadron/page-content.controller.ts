@@ -21,6 +21,8 @@ const bodySchema = z
     description_html: z.string().nullish(),
     name: z.string().nullish(),
     description_binary: z.string().nullish(),
+    stored_html: z.string().nullish(),
+    stored_name: z.string().nullish(),
   })
   .refine((body) => body.description_html != null || body.name != null, "Nothing to write");
 
@@ -48,6 +50,8 @@ export class SquadronPageContentController {
         descriptionHTML: body.data.description_html,
         name: body.data.name,
         storedBinary: body.data.description_binary,
+        storedHTML: body.data.stored_html,
+        storedName: body.data.stored_name,
       });
       return res.status(200).json(result);
     } catch (error) {

@@ -93,6 +93,31 @@ describe("writePageContent", () => {
     expect(result.description_html).toContain("first");
   });
 
+  it("keeps the body on a rename of a page with no stored binary", async () => {
+    const result = await writePageContent(fakeInstance(), {
+      pageId: PAGE_ID,
+      name: "Renamed",
+      storedHTML: "<p>keep me</p>",
+      storedName: "Design",
+    });
+    expect(result.description_html).toContain("keep me");
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, new Uint8Array(convertBase64StringToBinaryData(result.description_binary)));
+    expect(html(doc).titleHTML).toBe("Renamed");
+    expect(html(doc).contentHTML.match(/keep me/g)).toHaveLength(1);
+  });
+
+  it("ignores the stored HTML when the page is open", async () => {
+    const loaded = pageDoc("<p>unsaved edit</p>", "Design");
+    const result = await writePageContent(fakeInstance({ [PAGE_ID]: loaded }), {
+      pageId: PAGE_ID,
+      name: "Renamed",
+      storedHTML: "<p>stale</p>",
+    });
+    expect(result.description_html).toContain("unsaved edit");
+    expect(result.description_html).not.toContain("stale");
+  });
+
   it("edits the loaded doc in place when the page is open", async () => {
     const loaded = pageDoc("<p>old</p>", "Design");
     const updates: Uint8Array[] = [];

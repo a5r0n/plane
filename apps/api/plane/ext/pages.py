@@ -53,6 +53,9 @@ def write_through_live(page, description_html, name):
         "description_html": description_html,
         "name": name,
         "description_binary": base64.b64encode(stored).decode() if stored else None,
+        # a page never opened in the editor has no binary yet; live builds it from these
+        "stored_html": None if stored else page.description_html,
+        "stored_name": None if stored else page.name,
     }
     try:
         response = requests.post(

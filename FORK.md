@@ -7,8 +7,9 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 
 - Our code lives in our own dirs: backend `apps/api/plane/ext/` (Django app `plane.ext`, label
   `squadron_ext`), frontend `apps/web/core/components/squadron/`, because web code needs the `@/`
-  stores, which a separate package can't reach, and live server `apps/live/src/squadron/`. The backend dir sits inside `plane/` so the prod
-  image (which copies only `plane/`) needs no `Dockerfile.api` hook.
+  stores, which a separate package can't reach, and live server `apps/live/src/squadron/`. The
+  backend dir sits inside `plane/` so the prod image (which copies only `plane/`) needs no
+  `Dockerfile.api` hook.
 - Upstream files get only minimal hook edits: an import, a registration line, a render site.
   Edit upstream directly where a hook won't do.
 - Keep frontend render sites few, each in the least-churned upstream file that works: upstream
