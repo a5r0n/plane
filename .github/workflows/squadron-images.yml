@@ -95,7 +95,7 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         with:
           node-version: "22.18.0"
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
         if: steps.scope.outputs.run == 'true'
       - name: Install the suite
         if: steps.scope.outputs.run == 'true'
