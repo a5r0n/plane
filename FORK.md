@@ -54,6 +54,16 @@ a page open only on another replica is written from the stored state, so its edi
 change and their next save overwrites it; and an editor save already in flight when the API writes
 can land after it.
 
+## Search API
+
+`plane.ext` shadows the v1 work item search (`workspaces/<slug>/work-items/search/` and the legacy
+`.../issues/search/`) with `plane/ext/search.py`. On top of upstream's matches (name, project
+identifier, whole-number sequence id) it also matches the description and non-deleted comments,
+case-insensitively. Results rank title matches first, then description, then comment, newest
+first within each, and each carries `matched`: `title`, `description` or `comment`. Parameters
+and membership rules are upstream's. The matching is an unindexed `icontains` scan. Session search
+and the web app's search are unchanged.
+
 ## Images
 
 `.github/workflows/squadron-images.yml` builds `backend`, `frontend`, `admin`, `space` and `live`
