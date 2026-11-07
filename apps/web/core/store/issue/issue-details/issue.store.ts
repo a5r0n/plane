@@ -275,9 +275,8 @@ export class IssueStore implements IIssueStore {
     const issueIdentifier = `${project_identifier}-${sequence_id}`;
     const issueId = issue?.id;
     const projectId = issue?.project_id;
-    const rootWorkItemDetailStore = issue?.is_epic
-      ? this.rootIssueDetailStore.rootIssueStore.epicDetail
-      : this.rootIssueDetailStore.rootIssueStore.issueDetail;
+    // squadron: epics render in the work item detail view, which reads issueDetail
+    const rootWorkItemDetailStore = this.rootIssueDetailStore.rootIssueStore.issueDetail;
 
     if (!issue || !projectId || !issueId) throw new Error("Issue not found");
 
