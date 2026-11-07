@@ -8,6 +8,7 @@ import { action, makeObservable, runInAction } from "mobx";
 // types
 import type {
   TIssue,
+  TIssueServiceType,
   TLoader,
   ViewFlags,
   IssuePaginationOptions,
@@ -63,8 +64,12 @@ export class ProjectIssues extends BaseIssuesStore implements IProjectIssues {
   // filter store
   issueFilterStore: IProjectIssuesFilter;
 
-  constructor(_rootStore: IIssueRootStore, issueFilterStore: IProjectIssuesFilter) {
-    super(_rootStore, issueFilterStore);
+  constructor(
+    _rootStore: IIssueRootStore,
+    issueFilterStore: IProjectIssuesFilter,
+    serviceType?: TIssueServiceType // squadron
+  ) {
+    super(_rootStore, issueFilterStore, false, serviceType); // squadron
     makeObservable(this, {
       fetchIssues: action,
       fetchNextIssues: action,
