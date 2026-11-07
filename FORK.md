@@ -28,7 +28,12 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 | `.github/workflows/pull-request-build-lint-api.yml`      | `squadron` in `pull_request.branches`            | PR checks on our base            |
 | `.github/workflows/pull-request-build-lint-web-apps.yml` | `squadron` in `pull_request.branches`            | PR checks on our base            |
 | `apps/live/src/controllers/index.ts`                     | `SquadronPageContentController` in `CONTROLLERS` | Registers the page content route |
-| `apps/api/plane/bgtasks/page_version_task.py`            | `page.description` → `page.description_json`    | Upstream bug: page versions fail |
+| `apps/api/plane/bgtasks/page_version_task.py`            | `page.description` → `page.description_json`     | Upstream bug: page versions fail |
+| `apps/api/plane/db/models/issue.py`                      | `apply_epic_scope` import; `IssueManager` via it | Epic scope on `issue_objects`    |
+| `apps/api/plane/app/serializers/issue.py`                | `type_id` in `IssueSerializer` fields            | Clients tell epics apart         |
+| `apps/api/plane/utils/grouper.py`                        | `type_id` in `required_fields`                   | Clients tell epics apart         |
+| `apps/api/plane/app/views/issue/base.py`                 | `type_id` in three `.values()` lists             | Clients tell epics apart         |
+| `apps/api/plane/app/views/issue/sub_issue.py`            | `type_id` in the sub-issue `.values()`           | Clients tell epics apart         |
 
 ## Pages API
 
@@ -75,6 +80,58 @@ items holds one stored relation, so removing it from either item removes it from
 activity on both items records the removal. The relation type is read from the stored relation, so
 callers send only `related_issue`. It answers 204, 400 without a valid `related_issue`, and 404 when
 the work item isn't in the project or the pair has no relation.
+
+## Epics
+
+An epic is a work item whose type has `is_epic` set. `plane.ext` creates one `Epic` type per
+project on first use, and children point at the epic through `parent`, as sub-work-items do. No
+migration: the type and parent columns are upstream's.
+
+Session routes, `workspaces/<slug>/projects/<id>/`:
+
+- `epics/` lists and creates epics; `epics/<id>/` and the `epics/<id>/...` sub-routes (`issues/`
+  for children, `links/`, `comments/`, `history/`, `archive/` and the rest) reuse upstream's work
+  item views (`plane/ext/epics/routes.py` lists them);
+- history, comments and activity on an epic come back with `epic` in place of `issue` in the
+  activity names.
+
+v1 routes (API key), same prefix:
+
+- `epics/`: GET lists epics in upstream's paginated shape, POST creates one (any parent allowed);
+  `external_id` lookups find epics only;
+- `epics/<id>/`: GET only, 404 for a work item that isn't an epic. Updates and deletes go through
+  `work-items/<id>/`, where `parent` may be an epic;
+- `epics/<id>/issues/`: GET lists children (paginated); POST `{"work_item_ids": [...]}` makes
+  them children and answers the list of them. It checks every id before writing any: an id that is
+  the epic, one of its parents, not a UUID or not a work item in the project answers 400 naming it.
+
+Hiding works only on GET and only on the routes `HIDE` in `routes.py` names; every other route
+shows epics as upstream would. The named list routes (work item lists, boards, cycle and module
+issues, search) drop epics, and the named count routes (analytics, cycle and module totals and
+progress, project and user stats, the v1 project summary) leave them out of every number.
+`entity-search/` keeps showing them, for mentions. Session list responses carry `type_id`.
+
+How the hiding works, for anyone merging upstream:
+
+- the `issue_objects` manager filters by a request scope (`exclude`, `only`, `all`); outside a
+  scope, which includes background tasks, it shows everything. `objects` is never filtered;
+- in `exclude`, joins from cycle and module links and from projects skip epics
+  (`plane/ext/epics/joins.py`, installed at app start), since upstream counts over those joins;
+- the v1 project summary is replaced by a subclass that subtracts epics from `issues`;
+- `plane/ext/tests/test_epic_sweep.py` requests every GET route with and without an epic and fails
+  on any route that shows it or whose numbers move, unless the tables in `routes.py` name it. Run it
+  after moving to a new base: new upstream routes land there.
+
+Notifications, exports and webhooks treat an epic as a work item: subscribers are notified, exports
+include it as a row, and `issue` webhooks fire with `type` set to the epic type's id.
+
+Known limits:
+
+- archived epics have no list of their own;
+- session `epics/<id>/` and `epics/list/` accept any work item id, epic or not;
+- the project detail routes (`projects/<id>/`, `projects/details/`) count epics in
+  `next_work_item_sequence`, since epics take sequence numbers;
+- exports have no type column, so an epic can't be told from a work item there.
 
 ## Images
 

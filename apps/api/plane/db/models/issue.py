@@ -24,6 +24,7 @@ from .project import ProjectBaseModel
 from plane.utils.uuid import convert_uuid_to_integer
 from .description import Description
 from .state import StateGroup
+from plane.ext.epics.scope import apply_epic_scope  # squadron
 
 
 def get_default_properties():
@@ -91,7 +92,7 @@ def get_default_display_properties():
 # TODO: Handle identifiers for Bulk Inserts - nk
 class IssueManager(SoftDeletionManager):
     def get_queryset(self):
-        return (
+        return apply_epic_scope(  # squadron
             super()
             .get_queryset()
             .exclude(state__group=StateGroup.TRIAGE.value)

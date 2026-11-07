@@ -116,6 +116,7 @@ def issue_on_results(
         "sequence_id",
         "project_id",
         "parent_id",
+        "type_id",  # squadron
         "cycle_id",
         "sub_issues_count",
         "created_at",
