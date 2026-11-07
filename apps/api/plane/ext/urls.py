@@ -5,6 +5,7 @@
 from django.urls import path
 
 from plane.ext.pages import ProjectPageAPIEndpoint
+from plane.ext.search import WorkItemSearchEndpoint
 
 PAGES = "v1/workspaces/<str:slug>/projects/<uuid:project_id>/pages/"
 
@@ -21,5 +22,15 @@ urlpatterns = [
         PAGES + "<uuid:page_id>/archive/",
         ProjectPageAPIEndpoint.as_view({"post": "archive", "delete": "unarchive"}),
         name="squadron-project-page-archive",
+    ),
+    path(
+        "v1/workspaces/<str:slug>/work-items/search/",
+        WorkItemSearchEndpoint.as_view(http_method_names=["get"]),
+        name="squadron-work-item-search",
+    ),
+    path(
+        "v1/workspaces/<str:slug>/issues/search/",
+        WorkItemSearchEndpoint.as_view(http_method_names=["get"]),
+        name="squadron-issue-search",
     ),
 ]
