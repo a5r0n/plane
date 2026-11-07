@@ -75,6 +75,8 @@ jobs:
             echo "No stack paths changed: building images only." >> "$GITHUB_STEP_SUMMARY"
           fi
       - uses: docker/setup-buildx-action@v4
+        with:
+          cleanup: false # the runner is thrown away; removing the builder costs ~40s
       - name: Build backend and live
         uses: docker/bake-action@v7
         with:
@@ -88,9 +90,9 @@ jobs:
             migrator.cache-to=type=gha,mode=max,scope=backend
             live.cache-from=type=gha,scope=live
             live.cache-to=type=gha,mode=max,scope=live
-      - name: Start the stack
+      - name: Start migrations
         if: steps.scope.outputs.run == 'true'
-        run: $COMPOSE up -d --no-build
+        run: $COMPOSE up -d --no-build migrator # runs while the suite installs
       - uses: actions/setup-node@v6
         if: steps.scope.outputs.run == 'true'
         with:
