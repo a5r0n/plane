@@ -7,7 +7,7 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 
 - Our code lives in our own dirs: backend `apps/api/plane/ext/` (Django app `plane.ext`, label
   `squadron_ext`), frontend `apps/web/core/components/squadron/`, because web code needs the `@/`
-  stores, which a separate package can't reach. The backend dir sits inside `plane/` so the prod
+  stores, which a separate package can't reach, and live server `apps/live/src/squadron/`. The backend dir sits inside `plane/` so the prod
   image (which copies only `plane/`) needs no `Dockerfile.api` hook.
 - Upstream files get only minimal hook edits: an import, a registration line, a render site.
   Edit upstream directly where a hook won't do.
@@ -20,12 +20,38 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 
 ## Hook log
 
-| Upstream file | Edit | Why |
-|---|---|---|
-| `apps/api/plane/settings/common.py` | `plane.ext` in `INSTALLED_APPS` | Registers our app |
-| `apps/api/plane/urls.py` | `plane.ext.urls` mounted at `api/`, first | Our routes win over upstream's |
-| `.github/workflows/pull-request-build-lint-api.yml` | `squadron` in `pull_request.branches` | PR checks on our base |
-| `.github/workflows/pull-request-build-lint-web-apps.yml` | `squadron` in `pull_request.branches` | PR checks on our base |
+| Upstream file                                            | Edit                                             | Why                              |
+| -------------------------------------------------------- | ------------------------------------------------ | -------------------------------- |
+| `apps/api/plane/settings/common.py`                      | `plane.ext` in `INSTALLED_APPS`                  | Registers our app                |
+| `apps/api/plane/urls.py`                                 | `plane.ext.urls` mounted at `api/`, first        | Our routes win over upstream's   |
+| `.github/workflows/pull-request-build-lint-api.yml`      | `squadron` in `pull_request.branches`            | PR checks on our base            |
+| `.github/workflows/pull-request-build-lint-web-apps.yml` | `squadron` in `pull_request.branches`            | PR checks on our base            |
+| `apps/live/src/controllers/index.ts`                     | `SquadronPageContentController` in `CONTROLLERS` | Registers the page content route |
+
+## Pages API
+
+`plane.ext` serves project pages on the v1 API (API key) at the paths `plane_sdk` calls:
+
+- `workspaces/<slug>/projects/<id>/pages/`: list (paginated, child and archived pages included)
+  and create (`name` and `description_html` required, optional `parent_id`);
+- `.../pages/<page_id>/`: retrieve, update (PUT or PATCH) and delete (archived pages only);
+- `.../pages/<page_id>/archive/`: POST archives, DELETE restores.
+
+Permissions are the web app's (`ProjectPagePermission`; guests see only their own pages unless the
+project lets guests view everything). Archive, restore and delete reuse upstream's `PageViewSet`.
+
+The live server owns a page's document, so an update that changes `description_html` or `name`
+goes through it: the API posts the new content and the stored document to
+`<LIVE_URL>/squadron/pages/<page_id>/content/` (`apps/live/src/squadron/`). Live edits the
+loaded document in place, so open editors see the change, or the stored state if nobody has the
+page open, and returns the formats the API stores. If live can't be reached, the update answers
+502 and writes nothing. Locked and archived pages refuse updates.
+
+Needs on the API: `LIVE_BASE_URL` (and `LIVE_BASE_PATH` if not `/live/`) pointing at the live
+server, and the same `LIVE_SERVER_SECRET_KEY` as live. Known limits: with several live replicas,
+a page open only on another replica is written from the stored state, so its editors don't see the
+change and their next save overwrites it; and an editor save already in flight when the API writes
+can land after it.
 
 ## Images
 
