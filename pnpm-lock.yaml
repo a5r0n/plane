@@ -1980,6 +1980,33 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  tests/e2e:
+    devDependencies:
+      '@hocuspocus/provider':
+        specifier: 'catalog:'
+        version: 2.15.2(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27)
+      '@plane/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.12.0
+      '@types/ws':
+        specifier: 'catalog:'
+        version: 8.18.1
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.12.0)(@vitest/coverage-v8@4.1.11)(vite@8.0.16(@types/node@22.12.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.3))
+      ws:
+        specifier: 'catalog:'
+        version: 8.21.0
+      yjs:
+        specifier: 'catalog:'
+        version: 13.6.27
+
 packages:
 
   '@adobe/css-tools@4.4.4':
@@ -3119,6 +3146,7 @@ packages:
   '@opentelemetry/sdk-trace-base@2.8.0':
     resolution: {integrity: sha512-mhU4jp+vW0mGbFRd+GeXHvmfA4aDqWjBjLC3pE5XMpLs0IE2ryYb019Ts2AQrOq67gaTF25D91+fgvEHDZEnuQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
@@ -15210,7 +15238,7 @@ snapshots:
 
   lightningcss@1.32.0:
     dependencies:
-      detect-libc: 2.0.4
+      detect-libc: 2.1.2
     optionalDependencies:
       lightningcss-android-arm64: 1.32.0
       lightningcss-darwin-arm64: 1.32.0
