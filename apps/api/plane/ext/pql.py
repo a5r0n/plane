@@ -50,6 +50,7 @@ LIST_FUNCTIONS = {
 DAY_FUNCTIONS = {"daysAgo": -1, "daysFromNow": 1}
 
 COMPARE = {"<": "lt", "<=": "lte", ">": "gt", ">=": "gte"}
+MAX_DEPTH = 50  # nested ( and NOT; deeper is refused before Python's recursion limit
 
 
 def tokenize(text):
@@ -92,6 +93,7 @@ class Parser:
     def __init__(self, text, context):
         self.tokens = tokenize(text)
         self.pos = 0
+        self.depth = 0
         self.context = context
 
     # token helpers
@@ -140,9 +142,15 @@ class Parser:
         return q
 
     def parse_not(self):
-        if self.accept("keyword", "NOT"):
-            return ~self.parse_not()
-        return self.parse_primary()
+        self.depth += 1
+        if self.depth > MAX_DEPTH:
+            raise PQLError(f"the query nests ( or NOT more than {MAX_DEPTH} deep")
+        try:
+            if self.accept("keyword", "NOT"):
+                return ~self.parse_not()
+            return self.parse_primary()
+        finally:
+            self.depth -= 1
 
     def parse_primary(self):
         if self.accept("punct", "("):
@@ -258,7 +266,10 @@ class Parser:
             if sign_kind != "number":
                 raise PQLError(f"{value}() takes a whole number of days")
             self.expect("punct", ")")
-            return timezone.localdate() + timedelta(days=DAY_FUNCTIONS[value] * int(days))
+            try:
+                return timezone.localdate() + timedelta(days=DAY_FUNCTIONS[value] * int(days))
+            except (OverflowError, ValueError):
+                raise PQLError(f"{value}({days}) is out of the date range") from None
         raise PQLError(f"expected a date for comparison, got {value!r}")
 
     # conditions

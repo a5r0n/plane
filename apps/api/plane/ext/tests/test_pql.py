@@ -48,6 +48,11 @@ def test_list_routes_resolve_to_ext_view(tail):
         ('priority = "high")', "unexpected ')'"),
         ('title ~ "x" # y', "unexpected character '#'"),
         ('childOf("not an id")', "childOf() takes a work item id"),
+        ("dueDate < daysAgo(99999999999)", "out of the date range"),
+        ("dueDate < daysAgo(3000000)", "out of the date range"),
+        ("dueDate > daysFromNow(3000000)", "out of the date range"),
+        ("(" * 2000 + 'priority = "high"' + ")" * 2000, "nests ( or NOT more than"),
+        ("NOT " * 2000 + 'priority = "high"', "nests ( or NOT more than"),
     ],
 )
 def test_rejects_with_a_reason(pql, complaint):
