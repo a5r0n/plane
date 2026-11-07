@@ -28,6 +28,7 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 | `apps/api/plane/urls.py`                                                      | `plane.ext.urls` mounted at `api/`, first           | Our routes win over upstream's   |
 | `.github/workflows/pull-request-build-lint-api.yml`                           | `squadron` in `pull_request.branches`               | PR checks on our base            |
 | `.github/workflows/pull-request-build-lint-web-apps.yml`                      | `squadron` in `pull_request.branches`               | PR checks on our base            |
+| `.github/workflows/react-doctor.yml`                                          | job `if` skips draft PRs                            | Drafts spend no CI               |
 | `apps/live/src/controllers/index.ts`                                          | `SquadronPageContentController` in `CONTROLLERS`    | Registers the page content route |
 | `apps/api/plane/bgtasks/page_version_task.py`                                 | `page.description` → `page.description_json`        | Upstream bug: page versions fail |
 | `apps/api/plane/db/models/issue.py`                                           | `apply_epic_scope` import; `IssueManager` via it    | Epic scope on `issue_objects`    |
@@ -153,7 +154,8 @@ Known limits:
 ## Images
 
 `.github/workflows/squadron-images.yml` builds `backend`, `frontend`, `admin`, `space` and `live`
-for amd64. PRs to `squadron` only build. Pushes publish to `ghcr.io/a5r0n/plane/<image>`:
+for amd64. PRs to `squadron` only build, and skip while draft (marking one ready builds it).
+Pushes publish to `ghcr.io/a5r0n/plane/<image>`:
 
 - a push to `squadron` as `squadron` and `sha-<short>`;
 - a release tag as that same tag and `sha-<short>`.
@@ -167,7 +169,7 @@ in the file.
 ## Backend tests
 
 `.github/workflows/squadron-tests.yml` runs the full Django suite from `docker-compose-test.yml` on
-every PR to `squadron`, as the `Backend tests` check. No test is skipped.
+every non-draft PR to `squadron`, as the `Backend tests` check. No test is skipped.
 
 The default `API_KEY_RATE_LIMIT` (`60/minute`) fails these tests at `v1.4.3` with a 429, so the
 workflow raises it in the env file it generates:
