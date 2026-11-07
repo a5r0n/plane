@@ -187,8 +187,8 @@ others. Set the same value in `apps/api/.env` to match CI.
 
 ## E2E
 
-The `E2E` job in `squadron-images.yml` brings up `docker-compose-e2e.yml` on every PR to
-`squadron` from the images it just built (db, valkey, rabbitmq, api, live; the db on tmpfs,
+The `E2E` job in `squadron-images.yml` brings up `docker-compose-e2e.yml` on every non-draft
+PR to `squadron` from the images it just built (db, valkey, rabbitmq, api, live; the db on tmpfs,
 migrations once) and runs the TypeScript suite in `tests/e2e`. It skips the stack, but still
 builds, when a PR touches none of `apps/api`, `apps/live`, `packages`, `tests/e2e`, the compose
 file, the lockfile or the workflow.
