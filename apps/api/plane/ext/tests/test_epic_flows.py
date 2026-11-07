@@ -88,3 +88,22 @@ def test_every_alias_source_still_exists():
 def test_epic_routes_resolve_to_our_wrappers(workspace, project, epic):
     match = resolve(f"/api/workspaces/{workspace.slug}/projects/{project.id}/epics/{epic.id}/history/")
     assert match.url_name.startswith("squadron-epic-")
+
+
+@pytest.mark.parametrize("route", ["issues/", "v2/issues/", "issues/list/", "epics/", "epics/list/"])
+def test_session_lists_return_type_id(session_client, url, route, epic, normal):
+    params = {"issues": f"{epic.id},{normal.id}"} if route.endswith("list/") else {}
+    rows = results(session_client.get(url(route), params))
+    assert rows and all("type_id" in row for row in rows)
+
+
+def test_sub_issues_return_type_id(session_client, url, epic, child_of_epic):
+    assert "type_id" in session_client.get(url(f"epics/{epic.id}/issues/")).json()["sub_issues"][0]
+
+
+def test_create_returns_type_id(session_client, url):
+    assert "type_id" in session_client.post(url("epics/"), {"name": "E"}, format="json").json()
+
+
+def test_field_selection_can_return_type_id(session_client, url, normal):
+    assert "type_id" in results(session_client.get(url("issues/"), {"fields": "id,type_id"}))[0]

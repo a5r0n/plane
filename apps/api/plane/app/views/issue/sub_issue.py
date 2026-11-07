@@ -157,6 +157,7 @@ class SubIssuesEndpoint(BaseAPIView):
                 "sequence_id",
                 "project_id",
                 "parent_id",
+                "type_id",  # squadron
                 "cycle_id",
                 "module_ids",
                 "label_ids",
