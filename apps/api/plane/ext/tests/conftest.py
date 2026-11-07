@@ -9,16 +9,6 @@ from django.utils import timezone
 
 import pytest
 
-# reuse the upstream suite's fixtures, which only apply under plane/tests
-from plane.tests.conftest import (  # noqa: F401
-    api_client,
-    api_key_client,
-    api_token,
-    create_user,
-    session_client,
-    user_data,
-    workspace,
-)
 from rest_framework.test import APIClient
 from rest_framework.throttling import AnonRateThrottle
 
@@ -38,6 +28,16 @@ from plane.db.models import (
     State,
 )
 from plane.ext.epics.epic_type import ensure_epic_type
+from plane.tests import conftest as upstream
+
+# reuse the upstream suite's fixtures, which only apply under plane/tests
+api_client = upstream.api_client
+api_key_client = upstream.api_key_client
+api_token = upstream.api_token
+create_user = upstream.create_user
+session_client = upstream.session_client
+user_data = upstream.user_data
+workspace = upstream.workspace
 
 
 def make_project(workspace, user, name, identifier):

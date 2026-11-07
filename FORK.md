@@ -29,7 +29,7 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 | `.github/workflows/pull-request-build-lint-web-apps.yml` | `squadron` in `pull_request.branches`            | PR checks on our base            |
 | `apps/live/src/controllers/index.ts`                     | `SquadronPageContentController` in `CONTROLLERS` | Registers the page content route |
 | `apps/api/plane/bgtasks/page_version_task.py`            | `page.description` → `page.description_json`     | Upstream bug: page versions fail |
-| `apps/api/plane/db/models/issue.py`                      | `IssueManager` through `apply_epic_scope`        | Epic scope on `issue_objects`    |
+| `apps/api/plane/db/models/issue.py`                      | `apply_epic_scope` import; `IssueManager` via it | Epic scope on `issue_objects`    |
 | `apps/api/plane/app/serializers/issue.py`                | `type_id` in `IssueSerializer` fields            | Clients tell epics apart         |
 | `apps/api/plane/utils/grouper.py`                        | `type_id` in `required_fields`                   | Clients tell epics apart         |
 | `apps/api/plane/app/views/issue/base.py`                 | `type_id` in three `.values()` lists             | Clients tell epics apart         |
