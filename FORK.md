@@ -28,6 +28,7 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 | `.github/workflows/pull-request-build-lint-api.yml`      | `squadron` in `pull_request.branches`            | PR checks on our base            |
 | `.github/workflows/pull-request-build-lint-web-apps.yml` | `squadron` in `pull_request.branches`            | PR checks on our base            |
 | `apps/live/src/controllers/index.ts`                     | `SquadronPageContentController` in `CONTROLLERS` | Registers the page content route |
+| `apps/api/plane/bgtasks/page_version_task.py`            | `page.description` → `page.description_json`    | Upstream bug: page versions fail |
 
 ## Pages API
 
