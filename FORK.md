@@ -28,6 +28,7 @@ release tag (now `v1.4.3`) plus our code. All fork work targets it. `preview` on
 | `.github/workflows/pull-request-build-lint-api.yml`      | `squadron` in `pull_request.branches`            | PR checks on our base            |
 | `.github/workflows/pull-request-build-lint-web-apps.yml` | `squadron` in `pull_request.branches`            | PR checks on our base            |
 | `apps/live/src/controllers/index.ts`                     | `SquadronPageContentController` in `CONTROLLERS` | Registers the page content route |
+| `pnpm-workspace.yaml`                                    | `tests/e2e` in `packages`                        | Makes the E2E suite a package    |
 
 ## Pages API
 
@@ -67,7 +68,8 @@ and the web app's search are unchanged.
 ## Images
 
 `.github/workflows/squadron-images.yml` builds `backend`, `frontend`, `admin`, `space` and `live`
-for amd64. PRs to `squadron` only build. Pushes publish to `ghcr.io/a5r0n/plane/<image>`:
+for amd64. PRs to `squadron` only build, and there the E2E job builds `backend` and `live`. Pushes
+publish to `ghcr.io/a5r0n/plane/<image>`:
 
 - a push to `squadron` as `squadron` and `sha-<short>`;
 - a release tag as that same tag and `sha-<short>`.
@@ -95,6 +97,34 @@ workflow raises it in the env file it generates:
 Every `api_key_client` test uses the same token, so they share one throttle bucket in Redis, and
 which tests go over depends on how fast the run is. A local run with the default limit can fail
 others. Set the same value in `apps/api/.env` to match CI.
+
+## E2E
+
+The `E2E` job in `squadron-images.yml` brings up `docker-compose-e2e.yml` on every PR to
+`squadron` from the images it just built (db, valkey, rabbitmq, api, live; the db on tmpfs,
+migrations once) and runs the TypeScript suite in `tests/e2e`. It skips the stack, but still
+builds, when a PR touches none of `apps/api`, `apps/live`, `packages`, `tests/e2e`, the compose
+file, the lockfile or the workflow.
+
+The suite sets the stack up over HTTP as a new user would (instance admin, sign-in, workspace,
+API token, project), then checks cross-service flows:
+
+- `tests/pages.test.ts`: project pages between the v1 API and an editor-like Hocuspocus client
+  (same URL, token and cookie as the web editor).
+- `tests/mcp.test.ts`: a smoke run of `plane-mcp-server`, pinned by SHA in `src/mcp.ts`, over
+  stdio.
+
+Add a flow as a new `tests/<area>.test.ts`; `inject("stack")` gives it the user, workspace,
+project and API key. To run it locally (needs Node, pnpm and `uv`):
+
+```bash
+docker compose -f docker-compose-e2e.yml up -d --build --wait
+pnpm install && pnpm --filter @plane/e2e test
+docker compose -f docker-compose-e2e.yml down
+```
+
+`E2E_API_PORT` and `E2E_LIVE_PORT` move the published ports (18000, 13100); point the suite at
+them with `E2E_API_URL` and `E2E_LIVE_URL`.
 
 ## Versions
 

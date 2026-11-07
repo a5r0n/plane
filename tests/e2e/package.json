@@ -1,0 +1,25 @@
+{
+  "name": "@plane/e2e",
+  "version": "1.4.3",
+  "private": true,
+  "description": "Cross-service suite run against docker-compose-e2e.yml",
+  "license": "AGPL-3.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "check:types": "tsc --noEmit",
+    "check:lint": "oxlint .",
+    "check:format": "oxfmt --check .",
+    "fix:format": "oxfmt ."
+  },
+  "devDependencies": {
+    "@hocuspocus/provider": "catalog:",
+    "@plane/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/ws": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "ws": "catalog:",
+    "yjs": "catalog:"
+  }
+}
