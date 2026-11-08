@@ -19,7 +19,9 @@ class WorkItemListCreateAPIEndpoint(CustomFieldsMixin, IssueListCreateAPIEndpoin
         pql = request.GET.get("pql")
         if pql:
             try:
-                self.pql_q = compile_pql(pql, Context(user_id=request.user.id, workspace_slug=slug))
+                self.pql_q = compile_pql(
+                    pql, Context(user_id=request.user.id, workspace_slug=slug, project_id=project_id)
+                )
             except PQLError as exc:
                 return Response({"pql": f"Invalid PQL: {exc}"}, status=status.HTTP_400_BAD_REQUEST)
             # upstream refuses any pql; it has been compiled, so hand upstream the rest
