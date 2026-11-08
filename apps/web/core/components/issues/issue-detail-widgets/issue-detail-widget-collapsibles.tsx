@@ -11,6 +11,7 @@ import type { TIssueServiceType, TWorkItemWidgets } from "@plane/types";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useTimeLineRelationOptions } from "@/components/relations";
+import { StepsPanel } from "@/components/squadron/steps/panel"; // squadron
 // local imports
 import { AttachmentsCollapsible } from "./attachments";
 import { LinksCollapsible } from "./links";
@@ -52,6 +53,8 @@ export const IssueDetailWidgetCollapsibles = observer(function IssueDetailWidget
 
   return (
     <div className="flex flex-col">
+      {/* squadron */}
+      <StepsPanel workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={disabled} />
       {shouldRenderSubIssues && (
         <SubIssuesCollapsible
           workspaceSlug={workspaceSlug}

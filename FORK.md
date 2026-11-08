@@ -128,6 +128,28 @@ never change. The item read (`work-items/<id>/` and `work-items/<KEY-N>/`) retur
 `current_step` when `fields` asks for them. PQL `stepActor` matches the current step's actor:
 `!=` and `NOT IN` include items with no current step, `IS NULL` is a current step without an actor.
 
+The web app uses the same routes with session auth, under
+`/api/workspaces/<slug>/projects/<id>/issues/<item id>/steps/` (`set-path/`, `reorder/`,
+`<step id>/`). Its work item list rows carry `step_summary`: `{done, total, current}` (done counts
+`done` and `skipped`; `current` has `id`, `title`, `status`, `not_before`, `actor`), or `null` for
+an item with no steps, read in one query for the page.
+
+Web (`apps/web/core/components/squadron/steps/`):
+
+- Item page and peek: a steps panel under the description with a progress header
+  ("n/m done · next: X"). Done steps fold to one line, the current step opens as a card (Finish,
+  Failed, Skip; Retry once failed), later steps one line each, behind a failed step "held". An item
+  with no steps shows no panel, only an "Add steps" button. Failed needs a note (the UI enforces it;
+  the API doesn't). A current step whose `not_before` is in the future waits ("Start now" clears it).
+- Colours: amber when the current step's actor is the viewer, red when it failed (beats amber),
+  grey while waiting. Bots get square avatars.
+- Phone widths: a bottom "Your turn" bar for the viewer's step, and row menus open a bottom sheet
+  with Move up / Move down instead of drag.
+- List and board: a `Steps` display property (on by default) shows "n/m · current title" + actor.
+- Activity: `field` `step` rows read as "added step X", "marked failed X", "reordered the path".
+- Unit tests: `pnpm --filter=web test` (vitest, `apps/web/vitest.config.ts`); the `Web tests`
+  check runs them.
+
 ## Epics
 
 An epic is a work item whose type has `is_epic` set. `plane.ext` creates one `Epic` type per
