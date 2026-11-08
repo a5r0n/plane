@@ -8,10 +8,41 @@ from plane.ext.epics.urls import epic_patterns
 from plane.ext.pages import ProjectPageAPIEndpoint
 from plane.ext.relations import WorkItemRelationRemoveEndpoint
 from plane.ext.search import WorkItemSearchEndpoint
+from plane.ext.steps import (
+    StepDetailEndpoint,
+    StepListCreateEndpoint,
+    StepReorderEndpoint,
+    StepSetPathEndpoint,
+    WorkItemByIdentifierAPIEndpoint,
+    WorkItemDetailAPIEndpoint,
+)
 from plane.ext.work_items import WorkItemListCreateAPIEndpoint
 
 PROJECT = "v1/workspaces/<str:slug>/projects/<uuid:project_id>/"
 PAGES = PROJECT + "pages/"
+ITEMS = ("work-items", "issues")
+
+
+def step_patterns():
+    """Steps under both item prefixes, plus the item reads that can return them."""
+    for items in ITEMS:
+        item = f"{PROJECT}{items}/<uuid:issue_id>/"
+        steps = item + "steps/"
+        yield path(steps, StepListCreateEndpoint.as_view(), name=f"squadron-{items}-steps")
+        yield path(steps + "set-path/", StepSetPathEndpoint.as_view(), name=f"squadron-{items}-steps-set-path")
+        yield path(steps + "reorder/", StepReorderEndpoint.as_view(), name=f"squadron-{items}-steps-reorder")
+        yield path(steps + "<uuid:step_id>/", StepDetailEndpoint.as_view(), name=f"squadron-{items}-step")
+        yield path(
+            f"{PROJECT}{items}/<uuid:pk>/",
+            WorkItemDetailAPIEndpoint.as_view(http_method_names=["get", "patch", "delete"]),
+            name=f"squadron-{items}-detail",
+        )
+        yield path(
+            f"v1/workspaces/<str:slug>/{items}/<str:project_identifier>-<str:issue_identifier>/",
+            WorkItemByIdentifierAPIEndpoint.as_view(http_method_names=["get"]),
+            name=f"squadron-{items}-by-identifier",
+        )
+
 
 urlpatterns = [
     *(
@@ -50,6 +81,7 @@ urlpatterns = [
         WorkItemRelationRemoveEndpoint.as_view({"post": "remove_relation"}),
         name="squadron-work-item-relation-remove",
     ),
+    *step_patterns(),
 ]
 
 # epic routes and list shadows resolve before ours and upstream's

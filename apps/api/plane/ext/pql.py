@@ -13,6 +13,7 @@ from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from plane.db.models import Issue, IssueAssignee, IssueLabel
+from plane.ext.models import WorkItemStep
 
 
 class PQLError(ValueError):
@@ -80,13 +81,27 @@ SCALAR = {
     "project": "project_id",
     "parent": "parent_id",
 }
-UUID_FIELDS = {"state", "createdBy", "project", "parent"}
+UUID_FIELDS = {"state", "createdBy", "project", "parent", "stepActor"}
 TEXT = {"title": "name"}
 DATES = {"dueDate": "target_date", "startDate": "start_date", "createdAt": "created_at", "updatedAt": "updated_at"}
 DATETIMES = {"createdAt", "updatedAt"}
 # multi-valued: matched through an Exists on the link table, so NOT and != stay exact
 LINKS = {"assignee": (IssueAssignee, "assignee_id"), "label": (IssueLabel, "label_id")}
-FIELDS = set(SCALAR) | set(TEXT) | set(DATES) | set(LINKS)
+# matched on the item's current step (see FORK.md, Steps)
+STEP = {"stepActor"}
+FIELDS = set(SCALAR) | set(TEXT) | set(DATES) | set(LINKS) | STEP
+
+
+def on_current_step(**filters):
+    """Items whose current step (first pending or failed, in path order) matches filters."""
+    tied = {"sort_order": OuterRef("sort_order")}
+    earlier = WorkItemStep.objects.filter(issue_id=OuterRef("issue_id"), status__in=WorkItemStep.OPEN).filter(
+        Q(sort_order__lt=OuterRef("sort_order"))
+        | Q(**tied, created_at__lt=OuterRef("created_at"))
+        | Q(**tied, created_at=OuterRef("created_at"), id__lt=OuterRef("id"))
+    )
+    steps = WorkItemStep.objects.filter(issue_id=OuterRef("pk"), status__in=WorkItemStep.OPEN, **filters)
+    return Q(Exists(steps.exclude(Exists(earlier))))
 
 
 class Parser:
@@ -170,6 +185,8 @@ class Parser:
         if self.accept("keyword", "IS"):
             negate = self.accept("keyword", "NOT")
             self.expect("keyword", "NULL")
+            if negate and field in STEP:  # a current step with an actor, not "no current step without one"
+                return on_current_step(actor__isnull=False)
             q = self.is_null(field)
             return ~q if negate else q
         if self.accept("keyword", "NOT"):
@@ -218,8 +235,8 @@ class Parser:
             self.expect("punct", "(")
             self.expect("punct", ")")
             if value == "currentUser":
-                if field not in ("assignee", "createdBy"):
-                    raise PQLError(f"currentUser() fits assignee or createdBy, not {field!r}")
+                if field not in ("assignee", "createdBy", "stepActor"):
+                    raise PQLError(f"currentUser() fits assignee, createdBy or stepActor, not {field!r}")
                 return str(self.context.user_id)
             if value in LIST_FUNCTIONS:
                 if field != "stateGroup":
@@ -276,12 +293,16 @@ class Parser:
     def match(self, field, values):
         if field in DATES or field in TEXT:
             raise PQLError(f"IN doesn't work on {field!r}")
+        if field in STEP:
+            return on_current_step(actor_id__in=values)
         if field in LINKS:
             model, column = LINKS[field]
             return Q(Exists(model.objects.filter(issue_id=OuterRef("pk"), **{f"{column}__in": values})))
         return Q(**{f"{SCALAR[field]}__in": values})
 
     def is_null(self, field):
+        if field in STEP:
+            return on_current_step(actor__isnull=True)
         if field in LINKS:
             model, _ = LINKS[field]
             return ~Q(Exists(model.objects.filter(issue_id=OuterRef("pk"))))
