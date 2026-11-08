@@ -223,6 +223,24 @@ docker compose -f docker-compose-e2e.yml down
 `E2E_API_PORT` and `E2E_LIVE_PORT` move the published ports (18000, 13100); point the suite at
 them with `E2E_API_URL` and `E2E_LIVE_URL`.
 
+## Migrations
+
+Fork tables come from the fork's own migration graph in `apps/api/plane/ext/migrations/`, under
+the `squadron_ext` label, so its numbers never collide with upstream's `db` ones.
+
+- The first fork migration depends on the latest `db` migration at the base it's written on, and
+  that dependency never moves. Later ones depend on the previous fork migration (plus any newer
+  `db` migration they need).
+- Additive only: a fork migration creates `squadron_ext_*` tables, with FKs into upstream tables.
+  It never alters, drops or adds columns to an upstream table. The previous image then still runs
+  against the new schema, so rolling back is deploying the previous image.
+- Every `RunPython` has a `reverse_code`.
+
+The `Migrations` check (`.github/workflows/squadron-tests.yml`) runs on every non-draft PR to
+`squadron`: it applies all migrations, fails if `makemigrations --check --dry-run` finds a model
+change without a migration in `db` or `squadron_ext`, then undoes the fork migrations
+(`migrate squadron_ext zero`) and applies them again.
+
 ## Versions
 
 Versions are `vBASE-squadron.FEATURE.FIX`, for example `v1.4.3-squadron.1.0`. A git tag on
@@ -230,6 +248,7 @@ Versions are `vBASE-squadron.FEATURE.FIX`, for example `v1.4.3-squadron.1.0`. A 
 
 - `FEATURE`: a new feature, a migration or a breaking change to fork routes.
 - `FIX`: bug fixes. A fix release never contains a migration.
+- A release with a migration bumps `FEATURE`; dump the database before deploying it.
 - A new upstream base resets both numbers.
 - `package.json` stays upstream's.
 
@@ -247,3 +266,5 @@ pnpm install --frozen-lockfile   # must pass
 
 Then re-apply any hook whose upstream file moved (`git status` shows modify/delete), run the
 checks, and update the hook log (`fork/check-hooks.sh` flags logs whose file moved).
+Check the fork migrations still apply on the new base (the `Migrations` check). Their `db`
+dependencies stay as they are.

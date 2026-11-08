@@ -30,3 +30,25 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose -f docker-compose-test.yml down -v
+
+  migrations:
+    name: Migrations
+    if: ${{ !github.event.pull_request.draft }} # drafts spend no CI; marking ready runs it
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Create env file
+        run: cp apps/api/.env.example apps/api/.env
+      # Fork migrations must apply, undo and re-apply; no model change may lack a migration (FORK.md).
+      - name: Check migrations
+        run: >-
+          docker compose -f docker-compose-test.yml run --rm --build api-tests sh -c '
+          set -e;
+          python manage.py migrate --no-input;
+          python manage.py makemigrations --check --dry-run db squadron_ext;
+          python manage.py migrate squadron_ext zero --no-input;
+          python manage.py migrate squadron_ext --no-input'
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose-test.yml down -v
