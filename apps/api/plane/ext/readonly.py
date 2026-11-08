@@ -15,6 +15,7 @@ SETTING = "SQUADRON_READ_ONLY_USER_IDS"
 
 
 def read_only_user_ids():
+    # read on every request, not cached: tests patch the env per test
     return {part.strip().lower() for part in os.environ.get(SETTING, "").split(",") if part.strip()}
 
 
