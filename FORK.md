@@ -87,7 +87,8 @@ CE refuses any `pql`. The query is compiled by `plane/ext/pql.py`, a subset of P
 
 - fields: `priority`, `stateGroup`, `state`, `assignee`, `label`, `createdBy`, `project`, `parent`,
   `stepActor` (the current step's actor; see Steps) (UUIDs where Plane takes ids), `title` (`~`
-  only), and the dates `dueDate`, `startDate`, `createdAt`, `updatedAt`;
+  only), the dates `dueDate`, `startDate`, `createdAt`, `updatedAt`, and `prop.<key>` (a custom
+  property of the listed project; see Custom properties);
 - operators: `=`, `!=`, `IN (...)`, `NOT IN (...)`, `~` (contains, case-insensitive),
   `<`, `<=`, `>`, `>=` (dates only), `IS NULL`, `IS NOT NULL`, with `AND`, `OR`, `NOT` and
   parentheses. Keywords are case-insensitive; strings take either quote;
@@ -127,6 +128,46 @@ and after commit sends the issue webhook as an `updated` with `field` `step`. St
 never change. The item read (`work-items/<id>/` and `work-items/<KEY-N>/`) returns `steps` and
 `current_step` when `fields` asks for them. PQL `stepActor` matches the current step's actor:
 `!=` and `NOT IN` include items with no current step, `IS NULL` is a current step without an actor.
+
+## Custom properties
+
+Typed custom fields per project (`plane/ext/properties.py`, tables `squadron_ext_custom_properties`
+and `squadron_ext_custom_values`).
+
+Definitions, v1, API key, under `workspaces/<slug>/projects/<id>/`:
+
+- `properties/`: GET lists them (any project member); POST creates one;
+- `properties/<property id>/`: GET, PATCH, DELETE (a soft delete; its values stop showing).
+
+A property has `name`, `key` (`^[a-z][a-z0-9_]{0,63}$`, unique in the project for good, even after
+a delete), `type` (`text`, `number`, `boolean`, `date`, `datetime`, `choice`, `member`, `url`),
+`description`, `options` (choice only: `[{id, label, disabled}]`, `id` derived from `label` when
+left out), `multiple` (choice and member only), `visible`, `write_role` (20 admin, 15 member, 5
+guest; default 15) and `sort_order`. Only project admins write definitions. `type` and `key` never
+change; an option some item holds can't be removed (disable it), and `multiple` can't turn off while
+an item holds several values.
+
+Values ride on the v1 work item routes (`work-items/` and `issues/`: list, create, detail, PATCH,
+and `<KEY-N>`) as `custom_fields`, an object of `key: value` for every live property (unset is
+`null`, or `[]` when `multiple`). `fields=custom_fields` selects it like any field. A write sends
+only the keys it changes; `null` clears, a list replaces. The whole request is all-or-nothing: an
+unknown key, a role below the property's `write_role` (admins always pass), or a bad value answers
+400 with `{"custom_fields": {key: reason}}` and changes nothing, upstream fields included. Choice
+values are option ids (enabled ones; a held disabled option may be resent), members are active
+project members (a held one who left may be resent), numbers are finite and below 1e20, datetimes
+carry a time zone and are stored in UTC, text is one line up to 255, URLs are http(s).
+
+Each changed property adds one `IssueActivity` row (`field` `custom_fields`, comment `updated
+<name>`, old and new values as display text), and the write bumps `updated_at` and sends one issue
+webhook after commit (`field` `custom_fields`, old and new objects of the changed keys). Upstream's
+own webhook payloads don't carry `custom_fields`. Values belong to the property, so an item moved
+to another project shows that project's properties; its old values stay hidden.
+
+PQL `prop.<key>` filters the project list (`=`, `!=`, `IN`, `NOT IN`, `IS [NOT] NULL` on every type;
+`~` on text and url; `<`, `<=`, `>`, `>=` on number, date and datetime). Values are quoted except
+numbers and `TRUE`/`FALSE`; choice takes option ids (disabled ones too), member takes a user id or
+`currentUser()`, date takes `today()` and `daysAgo(n)` too. On a multiple property `=` means
+"holds". `!=` and `NOT IN` include items with no value. An unknown or deleted key answers 400.
 
 ## Epics
 
