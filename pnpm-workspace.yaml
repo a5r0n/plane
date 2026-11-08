@@ -90,6 +90,10 @@ catalog:
   "@types/sanitize-html": "2.16.0"
   "@types/ws": "^8.18.1"
   "@vitest/coverage-v8": "^4.1.11"
+  "@testing-library/dom": "10.4.0" # squadron
+  "@testing-library/react": "16.3.0" # squadron
+  "@testing-library/user-event": "14.6.1" # squadron
+  "jsdom": "26.1.0" # squadron
   "ast-types": "0.14.2"
   "autoprefixer": "^10.4.19"
   "axios": "1.18.1"

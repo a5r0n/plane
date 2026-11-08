@@ -10,6 +10,7 @@ import { useTranslation } from "@plane/i18n";
 import { LinkIcon, ViewsIcon, RelationPropertyIcon } from "@plane/propel/icons";
 // plane imports
 import type { TIssueServiceType, TWorkItemWidgets } from "@plane/types";
+import { AddStepsButton } from "@/components/squadron/steps/panel"; // squadron
 // local imports
 import { IssueAttachmentActionButton } from "./attachments";
 import { IssueLinksActionButton } from "./links";
@@ -33,6 +34,8 @@ export function IssueDetailWidgetActionButtons(props: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {/* squadron */}
+      <AddStepsButton issueId={issueId} disabled={disabled} />
       {!hideWidgets?.includes("sub-work-items") && (
         <SubIssuesActionButton
           issueId={issueId}

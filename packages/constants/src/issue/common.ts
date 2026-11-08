@@ -33,6 +33,7 @@ export enum EIssueGroupByToServerOptions {
   "cycle" = "cycle_id",
   "module" = "issue_module__module_id",
   "target_date" = "target_date",
+  // oxlint-disable-next-line typescript-eslint/no-duplicate-enum-values -- squadron
   "project" = "project_id",
   "created_by" = "created_by",
   // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
@@ -156,6 +157,7 @@ export const ISSUE_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = 
   "modules",
   "cycle",
   "issue_type",
+  "steps", // squadron
 ];
 
 export const SUB_ISSUES_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = [
@@ -208,6 +210,7 @@ export const ISSUE_DISPLAY_PROPERTIES: {
   },
   { key: "modules", titleTranslationKey: "common.module" },
   { key: "cycle", titleTranslationKey: "common.cycle" },
+  { key: "steps", titleTranslationKey: "issue.display.properties.steps" }, // squadron
 ];
 
 export const SPREADSHEET_PROPERTY_LIST: (keyof IIssueDisplayProperties)[] = [

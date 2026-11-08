@@ -45,6 +45,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 // local components
 import { IssuePropertyLabels } from "./labels";
 import { WithDisplayPropertiesHOC } from "./with-display-properties-HOC";
+import { IssueStepChip } from "@/components/squadron/steps/step-chip"; // squadron
 
 export interface IIssueProperties {
   issue: TIssue;
@@ -196,6 +197,10 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
 
   return (
     <div className={className}>
+      {/* squadron: step chip, own line on board cards */}
+      <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="steps">
+        <IssueStepChip issue={issue} className={props.activeLayout === "Kanban" ? "basis-full" : undefined} />
+      </WithDisplayPropertiesHOC>
       {/* basic properties */}
       {/* state */}
       <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="state">
