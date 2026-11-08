@@ -175,10 +175,13 @@ and `<KEY-N>`; `epics/`: list, create, detail and children) as `custom_fields`, 
 only the keys it changes; `null` clears, a list replaces. The whole request is all-or-nothing: an
 unknown key, a role below the property's `write_role` (admins always pass), or a bad value answers
 400 with `{"custom_fields": {key: reason}}` and changes nothing, upstream fields included. Upstream
-saves first; the values follow in their own transaction, re-checked under the item's lock. Choice
-values are option ids (enabled ones; a held disabled option may be resent), members are active
-project members (a held one who left may be resent), numbers are finite and below 1e20, datetimes
-carry a time zone and are stored in UTC, text is one line up to 255, URLs are http(s).
+saves first; the values follow in their own transaction, re-checked under the item's lock. If a
+property or option changed in between, the rest is saved and 409 names the unwritten keys in the
+same body. `custom_fields` must be sent as JSON; a form or multipart write with it answers 400.
+Choice values are option ids (enabled ones; a held disabled option may be resent), members are
+active project members (a held one who left may be resent), numbers are finite, below 1e20 and
+rounded to 10 decimal places, datetimes carry a time zone and are stored in UTC, text is one line
+up to 255, URLs are http(s).
 
 Each changed property adds one `IssueActivity` row (`field` `custom_fields`, comment `updated
 <name>`, old and new values as display text), and the write bumps `updated_at` and sends one issue

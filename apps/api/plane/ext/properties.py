@@ -7,10 +7,11 @@
 import re
 import uuid
 from datetime import date, datetime, timezone as dt_timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Context, Decimal, InvalidOperation
 from urllib.parse import urlparse
 
 from django.db import transaction
+from django.http import QueryDict
 from django.db.models import Count, F
 from django.utils import timezone
 from rest_framework import serializers, status
@@ -47,6 +48,10 @@ def _text(prop, raw):
     return raw
 
 
+NUMBER_LIMIT = Decimal(10) ** 20  # numeric(30,10)
+NUMBER_PLACES = Decimal("1e-10")
+
+
 def _number(prop, raw):
     if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
         raise ValueError("a number")
@@ -54,7 +59,9 @@ def _number(prop, raw):
         value = Decimal(str(raw))
     except InvalidOperation:
         raise ValueError("a number") from None
-    if not value.is_finite() or abs(value) >= Decimal(10) ** 20:
+    if value.is_finite() and abs(value) < NUMBER_LIMIT:
+        value = value.quantize(NUMBER_PLACES, context=Context(prec=40))  # the column's scale: a resend compares equal
+    if not value.is_finite() or abs(value) >= NUMBER_LIMIT:  # rounding can reach the limit
         raise ValueError("a finite number below 1e20")
     return value
 
@@ -360,6 +367,8 @@ class CustomFieldsMixin:
         if not isinstance(request.data, dict) or FIELD not in request.data:
             response = upstream(request, slug, project_id, *args, **kwargs)
             return self._attach(response)
+        if isinstance(request.data, QueryDict):
+            return Response({FIELD: "send custom_fields as JSON"}, status=status.HTTP_400_BAD_REQUEST)
         payload = request.data.pop(FIELD)  # upstream's activity and webhooks never see it
         if issue_id and not Issue.objects.filter(pk=issue_id, project_id=project_id, workspace__slug=slug).exists():
             return upstream(request, slug, project_id, *args, **kwargs)  # upstream's 404
@@ -372,8 +381,10 @@ class CustomFieldsMixin:
             with transaction.atomic():
                 new_id = response.data["id"]
                 Issue.all_objects.select_for_update(of=("self",)).get(pk=new_id)
-                plan, _ = validate_values(request.user, project_id, payload, new_id)  # re-check under the lock
+                plan, errors = validate_values(request.user, project_id, payload, new_id)  # re-check under the lock
                 write_values(request, new_id, plan)
+            if errors:  # a property or option changed in between: the rest is saved, these keys are not
+                return Response(errors, status=status.HTTP_409_CONFLICT)
         return self._attach(response)
 
     def _attach(self, response):

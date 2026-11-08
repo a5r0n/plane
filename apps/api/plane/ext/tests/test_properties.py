@@ -60,6 +60,12 @@ class TestCoerce:
         assert isinstance(present(prop, [held(prop, value_number=Decimal("2"))]), int)
         assert present(prop, [held(prop, value_number=Decimal("2.5"))]) == 2.5
 
+    def test_number_keeps_the_columns_ten_places(self, define):
+        prop = define("count", T.NUMBER)
+        assert coerce(prop, 0.1 + 0.2) == [Decimal("0.3")]  # what the column stores, so a resend is no change
+        with pytest.raises(ValueError):
+            coerce(prop, "99999999999999999999.99999999999")  # rounds up to 1e20, past numeric(30,10)
+
     def test_boolean(self, define):
         prop = define("done", T.BOOLEAN)
         assert coerce(prop, False) == [False]
@@ -415,6 +421,28 @@ class TestValues:
         assert {row["custom_fields"]["repo"] for row in listed} == {"plane", None}
         children = clients.api_key.get(f"{item_url(epic, 'epics')}issues/").json()["results"]
         assert [row["id"] for row in children] == [str(child.id)] and children[0]["custom_fields"] == EMPTY
+
+    def test_a_long_decimal_resent_writes_nothing(self, clients, item, fields):
+        assert self.patch(clients.api_key, item, {"custom_fields": {"count": 0.1 + 0.2}}).status_code == 200
+        assert self.patch(clients.api_key, item, {"custom_fields": {"count": 0.1 + 0.2}}).status_code == 200
+        assert rows(item).count() == 1
+        response = self.patch(clients.api_key, item, {"custom_fields": {"count": "99999999999999999999.99999999999"}})
+        assert response.status_code == 400
+
+    def test_a_form_write_must_send_json(self, clients, item, fields):
+        response = clients.api_key.patch(item_url(item), {"custom_fields": "x"}, format="multipart")
+        assert response.status_code == 400 and "JSON" in str(response.json())
+        assert clients.api_key.patch(item_url(item), {"name": "Form"}, format="multipart").status_code == 200
+
+    def test_a_property_gone_mid_write_answers_409_naming_it(self, clients, item, fields):
+        def delete_count(*args, **kwargs):  # lands after the first check, before the locked re-check
+            CustomProperty.objects.get(pk=fields.count.pk).delete()
+
+        with mock.patch("plane.api.views.issue.issue_activity.delay", side_effect=delete_count):
+            response = self.patch(clients.api_key, item, {"custom_fields": {"repo": "plane", "count": 1}})
+        assert response.status_code == 409
+        assert set(response.json()["custom_fields"]) == {"count"}
+        assert clients.api_key.get(item_url(item)).json()["custom_fields"]["repo"] == "plane"
 
     def test_create_with_a_bad_value_creates_nothing(self, clients, project, fields):
         response = clients.api_key.post(list_url(project), {"name": "New", "custom_fields": {"nope": 1}}, format="json")
