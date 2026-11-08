@@ -131,9 +131,7 @@ export const StepsPanel = observer(function StepsPanel({ workspaceSlug, projectI
       {!disabled && current && current.actor === viewer?.id && (
         <YourTurnBar
           step={current}
-          onFinish={(status, note) =>
-            void handlers.update(current.id, note ? { status: status === "done" ? "done" : status, note } : { status })
-          }
+          onFinish={(status, note) => void handlers.update(current.id, note ? { status, note } : { status })}
           onRetry={() => void handlers.update(current.id, { status: "pending", note: "" })}
         />
       )}
