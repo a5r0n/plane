@@ -11,13 +11,16 @@ from decimal import Decimal, InvalidOperation
 from urllib.parse import urlparse
 
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, F
+from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.response import Response
 
 from plane.api.views.base import BaseAPIView
 from plane.app.permissions import ProjectEntityPermission
-from plane.db.models import Project, ProjectMember
+from plane.bgtasks.webhook_task import webhook_activity
+from plane.db.models import Issue, IssueActivity, Project, ProjectMember, User
+from plane.utils.host import base_host
 from plane.ext.models import CustomProperty, CustomValue
 
 T = CustomProperty.Type
@@ -80,8 +83,9 @@ def _datetime(prop, raw):
 
 
 def _choice(prop, raw):
-    if raw not in {option["id"] for option in prop.options}:
-        raise ValueError(f"one of the option ids: {', '.join(option['id'] for option in prop.options)}")
+    enabled = [option["id"] for option in prop.options if not option.get("disabled")]
+    if raw not in enabled:
+        raise ValueError(f"one of the enabled option ids: {', '.join(enabled)}")
     return raw
 
 
@@ -114,11 +118,12 @@ COERCE = {
 }
 
 
-def coerce(prop, raw, held=()):
+def coerce(prop, raw, held=None):
     """JSON input -> the list of column values to store ([] clears); ValueError says what's expected.
 
-    A value in `held` (already on the item) skips the per-value check, so a disabled option or a
-    member who left survives a resend."""
+    `held` maps the item's current values (as input text) to their stored form: those skip the
+    per-value check, so a disabled option or a member who left survives a resend."""
+    held = held or {}
     if raw is None:
         return []
     if prop.multiple:
@@ -131,7 +136,8 @@ def coerce(prop, raw, held=()):
         items = [raw]
     values = []
     for item in items:
-        value = item if _key(prop, item) in held else COERCE[prop.type](prop, item)
+        key = _key(prop, item)
+        value = held[key] if key in held else COERCE[prop.type](prop, item)
         if value not in values:
             values.append(value)
     return values
@@ -139,7 +145,9 @@ def coerce(prop, raw, held=()):
 
 def _key(prop, item):
     """The form a raw input takes when compared with stored values (held)."""
-    return str(item) if prop.type == T.MEMBER else item
+    if prop.type == T.MEMBER:
+        return str(item).lower()
+    return item if isinstance(item, str) else None  # held only matters for choice and member
 
 
 def stored(prop, value):
@@ -159,10 +167,205 @@ def as_json(prop, value):
 
 def present(prop, values):
     """Stored rows -> the JSON a work item's custom_fields shows for prop."""
-    items = [as_json(prop, stored(prop, value)) for value in values]
+    return to_json(prop, [stored(prop, value) for value in values])
+
+
+def to_json(prop, column_values):
+    items = [as_json(prop, value) for value in column_values]
     if prop.multiple:
         return items
     return items[0] if items else None
+
+
+# values on work items
+
+FIELD = "custom_fields"
+
+
+def values_for(issue_ids):
+    """{issue id: {key: value}} with every live property of each item's own project; unset is None."""
+    projects = dict(Issue.all_objects.filter(id__in=issue_ids).values_list("id", "project_id"))
+    props = {}
+    for prop in CustomProperty.objects.filter(project_id__in=set(projects.values())):
+        props.setdefault(prop.project_id, []).append(prop)
+    rows = {}
+    # a moved item keeps its old project's values stored but hidden
+    for value in CustomValue.objects.filter(
+        issue_id__in=issue_ids, property__deleted_at__isnull=True, property__project_id=F("issue__project_id")
+    ):
+        rows.setdefault((value.issue_id, value.property_id), []).append(value)
+    return {
+        str(issue_id): {
+            prop.key: present(prop, rows.get((issue_id, prop.id), [])) for prop in props.get(project_id, [])
+        }
+        for issue_id, project_id in projects.items()
+    }
+
+
+def _current(issue_id, props):
+    """{property id: [stored column values]} for an item."""
+    by_id = {prop.id: prop for prop in props}
+    current = {prop.id: [] for prop in props}
+    for value in CustomValue.objects.filter(issue_id=issue_id, property__in=props):
+        current[value.property_id].append(stored(by_id[value.property_id], value))
+    return current
+
+
+def validate_values(user, project_id, payload, issue_id=None):
+    """-> ([(prop, new column values)], errors); errors is {"custom_fields": ...} or {}."""
+    if not isinstance(payload, dict):
+        return [], {FIELD: "must be an object of {key: value}"}
+    props = {prop.key: prop for prop in CustomProperty.objects.filter(project_id=project_id, key__in=list(payload))}
+    member = ProjectMember.objects.filter(project_id=project_id, member=user, is_active=True).first()
+    role = member.role if member else 0
+    current = _current(issue_id, list(props.values())) if issue_id else {}
+    plan, errors = [], {}
+    for key, raw in payload.items():
+        prop = props.get(key)
+        if prop is None:
+            errors[key] = "no such property in this project"
+            continue
+        if role != ADMIN and role < prop.write_role:
+            errors[key] = f"needs project role {prop.get_write_role_display()} or above to set"
+            continue
+        held = {_key(prop, as_json(prop, value)): value for value in current.get(prop.id, [])}
+        try:
+            plan.append((prop, coerce(prop, raw, held)))
+        except ValueError as exc:
+            errors[key] = f"expects {exc}"
+    return plan, ({FIELD: errors} if errors else {})
+
+
+def display(prop, column_values):
+    """Column values -> the text an activity row shows; None when empty."""
+    if not column_values:
+        return None
+    if prop.type == T.CHOICE:
+        labels = {option["id"]: option["label"] for option in prop.options}
+        items = [labels.get(value, value) for value in column_values]
+    elif prop.type == T.MEMBER:
+        names = dict(User.objects.filter(id__in=column_values).values_list("id", "display_name"))
+        items = [names.get(value) or str(value) for value in column_values]
+    else:
+        items = [
+            str(as_json(prop, value)).lower() if prop.type == T.BOOLEAN else str(as_json(prop, value))
+            for value in column_values
+        ]
+    return ", ".join(items)
+
+
+def write_values(request, issue_id, plan):
+    """Store the plan's values on an item: one activity row per changed key, one webhook after commit."""
+    issue = Issue.all_objects.select_for_update(of=("self",)).get(pk=issue_id)
+    props = [prop for prop, _ in plan]
+    current = _current(issue.id, props)
+    now = timezone.now()
+    old_json, new_json = {}, {}
+    for prop, new in plan:
+        old = current[prop.id]
+        if old == new:
+            continue
+        CustomValue.all_objects.filter(issue=issue, property=prop).delete()  # hard: all_objects is a plain manager
+        column = COLUMN[prop.type]
+        CustomValue.objects.bulk_create(
+            CustomValue(
+                issue=issue,
+                property=prop,
+                position=i,
+                project_id=issue.project_id,
+                workspace_id=issue.workspace_id,
+                created_by=request.user,
+                updated_by=request.user,
+                **{column: value},
+            )
+            for i, value in enumerate(new)
+        )
+        IssueActivity.objects.create(
+            issue_id=issue.id,
+            project_id=issue.project_id,
+            workspace_id=issue.workspace_id,
+            actor_id=request.user.id,
+            verb="updated",
+            field=FIELD,
+            old_value=display(prop, old),
+            new_value=display(prop, new),
+            comment=f"updated {prop.name}",
+            old_identifier=prop.id,
+            new_identifier=prop.id,
+            epoch=int(now.timestamp()),
+        )
+        old_json[prop.key], new_json[prop.key] = to_json(prop, old), to_json(prop, new)
+    if not new_json:
+        return
+    Issue.all_objects.filter(pk=issue.id).update(updated_at=now)
+    slug, origin = request.parser_context["kwargs"]["slug"], base_host(request=request, is_app=True)
+    transaction.on_commit(
+        lambda: webhook_activity.delay(
+            event="issue",
+            verb="updated",
+            field=FIELD,
+            old_value=old_json,
+            new_value=new_json,
+            actor_id=str(request.user.id),
+            slug=slug,
+            current_site=origin,
+            event_id=str(issue.id),
+            old_identifier=None,
+            new_identifier=None,
+        )
+    )
+
+
+class CustomFieldsMixin:
+    """custom_fields on v1 work item reads, and set all or nothing with the rest of a create or update."""
+
+    def get(self, request, *args, **kwargs):
+        asked = [field for field in request.GET.get("fields", "").split(",") if field]
+        if asked and FIELD not in asked:
+            return super().get(request, *args, **kwargs)
+        rest = [field for field in asked if field != FIELD]
+        drop_id = bool(rest) and "id" not in rest
+        if asked:  # ours; upstream gets the rest, plus id to look the values up by
+            query = request._request.GET.copy()
+            query["fields"] = ",".join(rest + ["id"] if "id" not in rest else rest)
+            request._request.GET = query
+        response = super().get(request, *args, **kwargs)
+        if response.status_code != status.HTTP_200_OK or not isinstance(response.data, dict):
+            return response
+        items = response.data["results"] if isinstance(response.data.get("results"), list) else [response.data]
+        found = values_for([item["id"] for item in items])
+        for item in items:
+            item[FIELD] = found.get(str(item["id"]), {})
+            if drop_id:
+                item.pop("id", None)
+        return response
+
+    def post(self, request, slug, project_id, *args, **kwargs):
+        return self._write(request, slug, project_id, None, super().post, args, kwargs)
+
+    def patch(self, request, slug, project_id, pk, *args, **kwargs):
+        return self._write(request, slug, project_id, pk, super().patch, (pk, *args), kwargs)
+
+    def _write(self, request, slug, project_id, issue_id, upstream, args, kwargs):
+        if not isinstance(request.data, dict) or FIELD not in request.data:
+            response = upstream(request, slug, project_id, *args, **kwargs)
+            return self._attach(response)
+        payload = request.data.pop(FIELD)  # upstream's activity and webhooks never see it
+        if issue_id and not Issue.objects.filter(pk=issue_id, project_id=project_id, workspace__slug=slug).exists():
+            return upstream(request, slug, project_id, *args, **kwargs)  # upstream's 404
+        plan, errors = validate_values(request.user, project_id, payload, issue_id)
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            response = upstream(request, slug, project_id, *args, **kwargs)
+            if status.is_success(response.status_code):
+                write_values(request, response.data["id"], plan)
+        return self._attach(response)
+
+    def _attach(self, response):
+        if status.is_success(response.status_code) and isinstance(response.data, dict) and "id" in response.data:
+            response.data[FIELD] = values_for([response.data["id"]]).get(str(response.data["id"]), {})
+        return response
 
 
 # definitions
@@ -210,8 +413,18 @@ class PropertySerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomProperty
         fields = (
-            "id", "name", "key", "type", "description", "options", "multiple", "visible", "write_role",
-            "sort_order", "created_at", "updated_at",
+            "id",
+            "name",
+            "key",
+            "type",
+            "description",
+            "options",
+            "multiple",
+            "visible",
+            "write_role",
+            "sort_order",
+            "created_at",
+            "updated_at",
         )
         read_only_fields = ("id", "created_at", "updated_at")
 
@@ -247,9 +460,7 @@ class PropertyBase(BaseAPIView):
         return None
 
     def get_property(self, slug, project_id, property_id):
-        return CustomProperty.objects.filter(
-            pk=property_id, project_id=project_id, workspace__slug=slug
-        ).first()
+        return CustomProperty.objects.filter(pk=property_id, project_id=project_id, workspace__slug=slug).first()
 
 
 class PropertyListCreateEndpoint(PropertyBase):
@@ -307,9 +518,7 @@ class PropertyDetailEndpoint(PropertyBase):
                     f"{'s' if held != 1 else ''}; disable it instead"
                 )
         if prop.multiple and data.get("multiple") is False:
-            several = (
-                CustomValue.objects.filter(property=prop).values("issue").annotate(n=Count("id")).filter(n__gt=1)
-            )
+            several = CustomValue.objects.filter(property=prop).values("issue").annotate(n=Count("id")).filter(n__gt=1)
             if several.exists():
                 return _error(f"{several.count()} work items hold several values; clear them first")
         prop = serializer.save()

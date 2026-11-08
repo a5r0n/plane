@@ -2,16 +2,17 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""The v1 project work item list, with `pql` filtering (plane.ext.pql) on top of upstream's."""
+"""The v1 project work item list, with `pql` filtering (plane.ext.pql) and custom_fields on top of upstream's."""
 
 from rest_framework import status
 from rest_framework.response import Response
 
 from plane.api.views.issue import IssueListCreateAPIEndpoint
 from plane.ext.pql import Context, PQLError, compile_pql
+from plane.ext.properties import CustomFieldsMixin
 
 
-class WorkItemListCreateAPIEndpoint(IssueListCreateAPIEndpoint):
+class WorkItemListCreateAPIEndpoint(CustomFieldsMixin, IssueListCreateAPIEndpoint):
     pql_q = None
 
     def get(self, request, slug, project_id):

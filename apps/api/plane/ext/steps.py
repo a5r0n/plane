@@ -19,6 +19,7 @@ from plane.app.permissions import ProjectEntityPermission
 from plane.bgtasks.webhook_task import webhook_activity
 from plane.db.models import Issue, IssueActivity, WorkspaceMember
 from plane.ext.models import WorkItemStep
+from plane.ext.properties import CustomFieldsMixin
 from plane.utils.host import base_host
 
 STEP_FIELDS = ("steps", "current_step")
@@ -358,9 +359,9 @@ class StepFieldsMixin:
         return response
 
 
-class WorkItemDetailAPIEndpoint(StepFieldsMixin, IssueDetailAPIEndpoint):
+class WorkItemDetailAPIEndpoint(CustomFieldsMixin, StepFieldsMixin, IssueDetailAPIEndpoint):
     pass
 
 
-class WorkItemByIdentifierAPIEndpoint(StepFieldsMixin, WorkspaceIssueAPIEndpoint):
+class WorkItemByIdentifierAPIEndpoint(CustomFieldsMixin, StepFieldsMixin, WorkspaceIssueAPIEndpoint):
     pass
