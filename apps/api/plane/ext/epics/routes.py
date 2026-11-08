@@ -133,7 +133,9 @@ COUNTS = {
 UNEXERCISED = {
     r"(^|/)(file-)?assets/": "files, not work items",
     r"/(comments|reactions|votes|links|issue-links|module-links|attachments|issue-attachments|versions"
-    r"|description-versions|activities)/<uuid:\w+>/(reactions/)?$": "one row of an item's own data; the sweep has none",
+    r"|description-versions|activities|steps)/<uuid:\w+>/(reactions/)?$": (
+        "one row of an item's own data; the sweep has none"
+    ),
     r"(intake|inbox)": "intake is off for the sweep project, and an epic never enters it",
     r"(archive/$|archived-)": "nothing is archived; archived epics have no list of their own",
     r"(members|invitations|join|api-tokens|accounts|preferences|me/profile|me/settings|themes|quick-links|stickies"

@@ -39,7 +39,7 @@ def test_list_routes_resolve_to_ext_view(tail):
         ("cycle IN activeCycle()", "unsupported field 'cycle'"),
         ("isOverdue()", "unsupported function isOverdue()"),
         ("priority IN openStates()", "fits stateGroup only"),
-        ("label = currentUser()", "fits assignee or createdBy"),
+        ("label = currentUser()", "fits assignee, createdBy or stepActor"),
         ('dueDate BETWEEN ("2026-01-01", "2026-02-01")', "expected an operator"),
         ('dueDate < "tomorrow"', "dates are YYYY-MM-DD"),
         ('priority > "low"', "date fields only"),

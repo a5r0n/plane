@@ -85,13 +85,13 @@ the work item isn't in the project or the pair has no relation.
 the legacy `.../issues/`) with `plane/ext/work_items.py`, so `?pql=` filters on the server. Upstream
 CE refuses any `pql`. The query is compiled by `plane/ext/pql.py`, a subset of Plane's PQL:
 
-- fields: `priority`, `stateGroup`, `state`, `assignee`, `label`, `createdBy`, `project`, `parent`
-  (UUIDs where Plane takes ids), `title` (`~` only), and the dates `dueDate`, `startDate`,
-  `createdAt`, `updatedAt`;
+- fields: `priority`, `stateGroup`, `state`, `assignee`, `label`, `createdBy`, `project`, `parent`,
+  `stepActor` (the current step's actor; see Steps) (UUIDs where Plane takes ids), `title` (`~`
+  only), and the dates `dueDate`, `startDate`, `createdAt`, `updatedAt`;
 - operators: `=`, `!=`, `IN (...)`, `NOT IN (...)`, `~` (contains, case-insensitive),
   `<`, `<=`, `>`, `>=` (dates only), `IS NULL`, `IS NOT NULL`, with `AND`, `OR`, `NOT` and
   parentheses. Keywords are case-insensitive; strings take either quote;
-- functions: `currentUser()`, `openStates()`, `closedStates()`, `activeStates()`, `today()`,
+- functions: `currentUser()` (assignee, createdBy, stepActor), `openStates()`, `closedStates()`, `activeStates()`, `today()`,
   `daysAgo(n)`, `daysFromNow(n)`, and the predicates `hasNoAssignee()`, `hasNoLabel()`,
   `isTopLevel()` and `childOf("KEY-N")` (or a UUID).
 
@@ -100,6 +100,33 @@ Anything else (other fields, `BETWEEN`, cycles, relation and other functions) an
 permissions and epic hiding are upstream's, and `total_count` counts the filtered set. Assignee and
 label match current links only (soft-deleted ones don't count). Structured `filters=` is still
 refused. There is no workspace-wide list or count on CE, so those still fail.
+
+## Steps
+
+A work item can carry an ordered path of steps (`plane/ext/steps.py`, table
+`squadron_ext_work_item_steps`). A step has `title`, `detail`, `actor` (optional; an active workspace
+member), `status` (`pending`, `done`, `failed`, `skipped`), `note` and `not_before`. The current step
+is the first `pending` or `failed` one in path order: a failed step stays current until it's set back
+to `pending` or `skipped`. No permission rules beyond the project's: members and admins can change any
+step.
+
+v1 routes, API key, under `workspaces/<slug>/projects/<id>/work-items/<item id>/` (and `issues/`):
+
+- `steps/`: GET the path; POST adds a step, at `position` (0-based) or at the end;
+- `steps/<step id>/`: GET, PATCH (finishing is `{"status": "done", "note": ...}`), DELETE;
+- `steps/set-path/`: POST `{"steps": [...]}` replaces the path: an entry with `id` updates that step,
+  one without creates a step, steps left out are deleted; all entries validate before any write;
+- `steps/reorder/`: POST `{"step_ids": [...]}`, naming every step of the item once.
+
+DELETE and set-path remove steps for good (a hard delete, not upstream's soft delete); the
+removed step survives only in the activity row.
+
+Every write that changes something adds one `IssueActivity` row (`field` `step`; old and new values
+are the step, or the whole path for set-path and reorder, as JSON), bumps the item's `updated_at`,
+and after commit sends the issue webhook as an `updated` with `field` `step`. State and assignees
+never change. The item read (`work-items/<id>/` and `work-items/<KEY-N>/`) returns `steps` and
+`current_step` when `fields` asks for them. PQL `stepActor` matches the current step's actor:
+`!=` and `NOT IN` include items with no current step, `IS NULL` is a current step without an actor.
 
 ## Epics
 
