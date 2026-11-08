@@ -336,6 +336,13 @@ class TestValues:
         assert call["old_value"] == {"repo": None, "count": None, "owner": None}
         assert call["new_value"] == {"repo": "plane", "count": 3, "owner": str(create_user.id)}
 
+    def test_a_held_number_or_boolean_changes(self, clients, item, fields, define):
+        define("done", T.BOOLEAN)
+        assert self.patch(clients.api_key, item, {"custom_fields": {"count": 2, "done": True}}).status_code == 200
+        response = self.patch(clients.api_key, item, {"custom_fields": {"count": 3.5, "done": False}})
+        assert response.status_code == 200, response.json()
+        assert (response.json()["custom_fields"]["count"], response.json()["custom_fields"]["done"]) == (3.5, False)
+
     def test_same_values_write_nothing(self, clients, item, fields, webhook):
         self.patch(clients.api_key, item, {"custom_fields": {"repo": "plane"}})
         webhook.reset_mock()

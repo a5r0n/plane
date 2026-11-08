@@ -137,7 +137,7 @@ def coerce(prop, raw, held=None):
     values = []
     for item in items:
         key = _key(prop, item)
-        value = held[key] if key in held else COERCE[prop.type](prop, item)
+        value = held[key] if key is not None and key in held else COERCE[prop.type](prop, item)
         if value not in values:
             values.append(value)
     return values
@@ -147,7 +147,9 @@ def _key(prop, item):
     """The form a raw input takes when compared with stored values (held)."""
     if prop.type == T.MEMBER:
         return str(item).lower()
-    return item if isinstance(item, str) else None  # held only matters for choice and member
+    if prop.type == T.CHOICE and isinstance(item, str):
+        return item
+    return None  # other types re-check every value
 
 
 def stored(prop, value):
