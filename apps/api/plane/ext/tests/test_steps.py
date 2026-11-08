@@ -271,6 +271,33 @@ class TestHistory:
         assert kwargs["new_identifier"] == step["id"]
         json.dumps(kwargs)  # celery's json serializer must take it
 
+    def test_webhook_for_a_delete_names_the_removed_step(
+        self, client, item, webhook, django_capture_on_commit_callbacks
+    ):
+        step = add(client, item, title="build").json()
+        with django_capture_on_commit_callbacks(execute=True):
+            client.delete(steps_url(item, f"{step['id']}/"))
+        kwargs = webhook.call_args.kwargs
+        assert kwargs["field"] == "step" and kwargs["new_value"] is None
+        assert kwargs["old_value"]["id"] == step["id"]
+        assert (kwargs["old_identifier"], kwargs["new_identifier"]) == (step["id"], None)
+
+    @pytest.mark.parametrize("bulk", ["set-path", "reorder"])
+    def test_webhook_for_a_path_change_carries_the_path(
+        self, client, item, webhook, django_capture_on_commit_callbacks, bulk
+    ):
+        a, b = (add(client, item, title=t).json()["id"] for t in "ab")
+        with django_capture_on_commit_callbacks(execute=True):
+            if bulk == "set-path":
+                set_path(client, item, [{"id": b}, {"id": a}])
+            else:
+                client.post(steps_url(item, "reorder/"), {"step_ids": [b, a]}, format="json")
+        kwargs = webhook.call_args.kwargs
+        assert [s["id"] for s in kwargs["old_value"]] == [a, b]
+        assert [s["id"] for s in kwargs["new_value"]] == [b, a]
+        assert (kwargs["old_identifier"], kwargs["new_identifier"]) == (None, None)
+        json.dumps(kwargs)
+
     def test_no_webhook_when_the_write_fails(self, client, item, webhook, django_capture_on_commit_callbacks):
         with django_capture_on_commit_callbacks(execute=True):
             add(client, item, title="")

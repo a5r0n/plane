@@ -118,6 +118,9 @@ v1 routes, API key, under `workspaces/<slug>/projects/<id>/work-items/<item id>/
   one without creates a step, steps left out are deleted; all entries validate before any write;
 - `steps/reorder/`: POST `{"step_ids": [...]}`, naming every step of the item once.
 
+DELETE and set-path remove steps for good (a hard delete, not upstream's soft delete); the
+removed step survives only in the activity row.
+
 Every write that changes something adds one `IssueActivity` row (`field` `step`; old and new values
 are the step, or the whole path for set-path and reorder, as JSON), bumps the item's `updated_at`,
 and after commit sends the issue webhook as an `updated` with `field` `step`. State and assignees
