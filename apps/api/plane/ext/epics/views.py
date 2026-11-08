@@ -20,6 +20,7 @@ from plane.app.views.issue.base import IssueViewSet
 from plane.db.models import Issue, Project, StateGroup
 from plane.ext.epics.epic_type import ensure_epic_type
 from plane.ext.epics.scope import current_scope, epic_scope
+from plane.ext.properties import CustomFieldsMixin, with_values
 from plane.utils.host import base_host
 
 
@@ -60,7 +61,7 @@ def get_epic(slug, project_id, pk):
     )
 
 
-class EpicListCreateAPIEndpoint(IssueListCreateAPIEndpoint):
+class EpicListCreateAPIEndpoint(CustomFieldsMixin, IssueListCreateAPIEndpoint):
     """v1 work item list and create, for epics only."""
 
     def get_queryset(self):
@@ -84,7 +85,7 @@ class EpicListCreateAPIEndpoint(IssueListCreateAPIEndpoint):
         return super().post(request, slug, project_id)
 
 
-class EpicDetailAPIEndpoint(IssueDetailAPIEndpoint):
+class EpicDetailAPIEndpoint(CustomFieldsMixin, IssueDetailAPIEndpoint):
     def get(self, request, slug, project_id, pk):
         get_epic(slug, project_id, pk)
         return super().get(request, slug, project_id, pk)
@@ -117,7 +118,9 @@ class EpicChildrenAPIEndpoint(BaseAPIView):
         return self.paginate(
             request=request,
             queryset=children,
-            on_results=lambda rows: APIIssueSerializer(rows, many=True, fields=self.fields, expand=self.expand).data,
+            on_results=lambda rows: with_values(
+                APIIssueSerializer(rows, many=True, fields=self.fields, expand=self.expand).data
+            ),
         )
 
     def post(self, request, slug, project_id, pk):

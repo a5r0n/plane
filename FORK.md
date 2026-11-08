@@ -143,16 +143,17 @@ A property has `name`, `key` (`^[a-z][a-z0-9_]{0,63}$`, unique in the project fo
 a delete), `type` (`text`, `number`, `boolean`, `date`, `datetime`, `choice`, `member`, `url`),
 `description`, `options` (choice only: `[{id, label, disabled}]`, `id` derived from `label` when
 left out), `multiple` (choice and member only), `visible`, `write_role` (20 admin, 15 member, 5
-guest; default 15) and `sort_order`. Only project admins write definitions. `type` and `key` never
+guest, which acts as member while upstream refuses guest writes; default 15) and `sort_order`. Only project admins write definitions. `type` and `key` never
 change; an option some item holds can't be removed (disable it), and `multiple` can't turn off while
 an item holds several values.
 
 Values ride on the v1 work item routes (`work-items/` and `issues/`: list, create, detail, PATCH,
-and `<KEY-N>`) as `custom_fields`, an object of `key: value` for every live property (unset is
+and `<KEY-N>`; `epics/`: list, create, detail and children) as `custom_fields`, an object of `key: value` for every live property (unset is
 `null`, or `[]` when `multiple`). `fields=custom_fields` selects it like any field. A write sends
 only the keys it changes; `null` clears, a list replaces. The whole request is all-or-nothing: an
 unknown key, a role below the property's `write_role` (admins always pass), or a bad value answers
-400 with `{"custom_fields": {key: reason}}` and changes nothing, upstream fields included. Choice
+400 with `{"custom_fields": {key: reason}}` and changes nothing, upstream fields included. Upstream
+saves first; the values follow in their own transaction, re-checked under the item's lock. Choice
 values are option ids (enabled ones; a held disabled option may be resent), members are active
 project members (a held one who left may be resent), numbers are finite and below 1e20, datetimes
 carry a time zone and are stored in UTC, text is one line up to 255, URLs are http(s).

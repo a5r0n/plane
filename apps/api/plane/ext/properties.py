@@ -318,6 +318,15 @@ def write_values(request, issue_id, plan):
     )
 
 
+def with_values(items):
+    """Add custom_fields to serialized work items, in place."""
+    found = values_for([item["id"] for item in items if "id" in item])
+    for item in items:
+        if "id" in item:
+            item[FIELD] = found.get(str(item["id"]), {})
+    return items
+
+
 class CustomFieldsMixin:
     """custom_fields on v1 work item reads, and set all or nothing with the rest of a create or update."""
 
@@ -335,9 +344,8 @@ class CustomFieldsMixin:
         if response.status_code != status.HTTP_200_OK or not isinstance(response.data, dict):
             return response
         items = response.data["results"] if isinstance(response.data.get("results"), list) else [response.data]
-        found = values_for([item["id"] for item in items])
+        with_values(items)
         for item in items:
-            item[FIELD] = found.get(str(item["id"]), {})
             if drop_id:
                 item.pop("id", None)
         return response
@@ -358,10 +366,14 @@ class CustomFieldsMixin:
         plan, errors = validate_values(request.user, project_id, payload, issue_id)
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
-        with transaction.atomic():
-            response = upstream(request, slug, project_id, *args, **kwargs)
-            if status.is_success(response.status_code):
-                write_values(request, response.data["id"], plan)
+        # upstream commits before it queues its tasks, as it does without custom_fields
+        response = upstream(request, slug, project_id, *args, **kwargs)
+        if status.is_success(response.status_code):
+            with transaction.atomic():
+                new_id = response.data["id"]
+                Issue.all_objects.select_for_update(of=("self",)).get(pk=new_id)
+                plan, _ = validate_values(request.user, project_id, payload, new_id)  # re-check under the lock
+                write_values(request, new_id, plan)
         return self._attach(response)
 
     def _attach(self, response):

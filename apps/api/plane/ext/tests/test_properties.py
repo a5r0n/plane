@@ -7,7 +7,7 @@ from decimal import Decimal
 from unittest import mock
 
 import pytest
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from rest_framework import status
 
 from plane.db.models import Issue, IssueActivity, ProjectMember, User, WorkspaceMember
@@ -391,6 +391,30 @@ class TestValues:
         assert response.status_code == 201, response.json()
         assert response.json()["custom_fields"]["count"] == 2.5
         webhook.assert_called_once()
+
+    def test_upstream_queues_its_tasks_outside_our_transaction(self, clients, project, item, fields, webhook):
+        depth = []  # a worker must find upstream's row committed when its task runs
+        with mock.patch("plane.api.views.issue.issue_activity.delay") as delay:
+            delay.side_effect = lambda *a, **k: depth.append(len(connection.atomic_blocks))
+            outside = len(connection.atomic_blocks)
+            clients.api_key.post(list_url(project), {"name": "New", "custom_fields": {"count": 1}}, format="json")
+            self.patch(clients.api_key, item, {"name": "Renamed", "custom_fields": {"count": 2}})
+        assert depth == [outside, outside]
+        assert project.project_issue.get(name="New").id and CustomValue.objects.filter(issue=item).exists()
+
+    def test_epics_carry_values_like_any_work_item(self, clients, project, epic, fields):
+        child = make_issue(project, "Child", parent=epic)
+        response = clients.api_key.post(
+            list_url(project, "epics"), {"name": "E", "custom_fields": {"repo": "plane"}}, format="json"
+        )
+        assert response.status_code == 201 and response.json()["custom_fields"]["repo"] == "plane"
+        assert self.patch(clients.api_key, epic, {"custom_fields": {"count": 2}}).status_code == 200
+        read = clients.api_key.get(item_url(epic, "epics")).json()
+        assert read["custom_fields"]["count"] == 2  # v1 epics/<id>/ is read-only; writes go through work-items/
+        listed = clients.api_key.get(list_url(project, "epics")).json()["results"]
+        assert {row["custom_fields"]["repo"] for row in listed} == {"plane", None}
+        children = clients.api_key.get(f"{item_url(epic, 'epics')}issues/").json()["results"]
+        assert [row["id"] for row in children] == [str(child.id)] and children[0]["custom_fields"] == EMPTY
 
     def test_create_with_a_bad_value_creates_nothing(self, clients, project, fields):
         response = clients.api_key.post(list_url(project), {"name": "New", "custom_fields": {"nope": 1}}, format="json")
