@@ -4,13 +4,21 @@
 
 """Custom properties: definitions, typed values and `custom_fields` on v1 work items (FORK.md)."""
 
+import re
 import uuid
 from datetime import date, datetime, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlparse
 
-from plane.db.models import ProjectMember
-from plane.ext.models import CustomProperty
+from django.db import transaction
+from django.db.models import Count
+from rest_framework import serializers, status
+from rest_framework.response import Response
+
+from plane.api.views.base import BaseAPIView
+from plane.app.permissions import ProjectEntityPermission
+from plane.db.models import Project, ProjectMember
+from plane.ext.models import CustomProperty, CustomValue
 
 T = CustomProperty.Type
 KEY_RE = r"^[a-z][a-z0-9_]{0,63}$"
@@ -155,3 +163,165 @@ def present(prop, values):
     if prop.multiple:
         return items
     return items[0] if items else None
+
+
+# definitions
+
+
+OPTION_ID_RE = r"^[a-z0-9][a-z0-9_]{0,63}$"
+ADMIN = 20
+
+
+def _slug(label):
+    return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:60] or "option"
+
+
+def normalize_options(raw):
+    """Options input -> [{id, label, disabled}]; a missing id is derived from the label."""
+    if not isinstance(raw, list):
+        raise serializers.ValidationError("a list of {id?, label, disabled?}")
+    given = {item.get("id") for item in raw if isinstance(item, dict)}
+    options, ids = [], set()
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("label"), str) or not item["label"].strip():
+            raise serializers.ValidationError("each option needs a non-empty label")
+        if len(item["label"]) > MAX_TEXT:
+            raise serializers.ValidationError(f"option labels are up to {MAX_TEXT} characters")
+        option_id = item.get("id")
+        if option_id is None:
+            base = option_id = _slug(item["label"])
+            n = 1
+            while option_id in ids or option_id in given:
+                n += 1
+                option_id = f"{base}_{n}"
+        elif not isinstance(option_id, str) or not re.match(OPTION_ID_RE, option_id):
+            raise serializers.ValidationError(f"option id {option_id!r} must be lowercase letters, digits and _")
+        if option_id in ids:
+            raise serializers.ValidationError(f"option id {option_id!r} is repeated")
+        disabled = item.get("disabled", False)
+        if not isinstance(disabled, bool):
+            raise serializers.ValidationError("disabled is true or false")
+        ids.add(option_id)
+        options.append({"id": option_id, "label": item["label"], "disabled": disabled})
+    return options
+
+
+class PropertySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomProperty
+        fields = (
+            "id", "name", "key", "type", "description", "options", "multiple", "visible", "write_role",
+            "sort_order", "created_at", "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at")
+
+    def validate_key(self, value):
+        if not re.match(KEY_RE, value):
+            raise serializers.ValidationError("lowercase letters, digits and _, starting with a letter, up to 64")
+        return value
+
+    def validate_options(self, value):
+        return normalize_options(value)
+
+    def validate(self, data):
+        prop_type = data.get("type", self.instance.type if self.instance else None)
+        if data.get("options") and prop_type != T.CHOICE:
+            raise serializers.ValidationError({"options": "only choice properties have options"})
+        if data.get("multiple") and prop_type not in (T.CHOICE, T.MEMBER):
+            raise serializers.ValidationError({"multiple": "only choice and member properties take several values"})
+        return data
+
+
+def _error(message, code=status.HTTP_400_BAD_REQUEST):
+    return Response({"error": message}, status=code)
+
+
+class PropertyBase(BaseAPIView):
+    permission_classes = [ProjectEntityPermission]
+
+    def check_admin(self, request, project_id):
+        if not ProjectMember.objects.filter(
+            project_id=project_id, member=request.user, role=ADMIN, is_active=True
+        ).exists():
+            return _error("Only project admins can change properties", status.HTTP_403_FORBIDDEN)
+        return None
+
+    def get_property(self, slug, project_id, property_id):
+        return CustomProperty.objects.filter(
+            pk=property_id, project_id=project_id, workspace__slug=slug
+        ).first()
+
+
+class PropertyListCreateEndpoint(PropertyBase):
+    def get(self, request, slug, project_id):
+        props = CustomProperty.objects.filter(project_id=project_id, workspace__slug=slug)
+        return Response(PropertySerializer(props, many=True).data)
+
+    @transaction.atomic
+    def post(self, request, slug, project_id):
+        denied = self.check_admin(request, project_id)
+        if denied:
+            return denied
+        serializer = PropertySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        key = serializer.validated_data["key"]
+        # all_objects: a deleted property's key stays reserved
+        if CustomProperty.all_objects.filter(project_id=project_id, key=key).exists():
+            return _error(f"key {key!r} is already used in this project (deleted keys stay reserved)")
+        project = Project.objects.get(pk=project_id, workspace__slug=slug)
+        prop = serializer.save(project=project, workspace_id=project.workspace_id)
+        return Response(PropertySerializer(prop).data, status=status.HTTP_201_CREATED)
+
+
+class PropertyDetailEndpoint(PropertyBase):
+    def get(self, request, slug, project_id, property_id):
+        prop = self.get_property(slug, project_id, property_id)
+        if prop is None:
+            return _error("Property not found", status.HTTP_404_NOT_FOUND)
+        return Response(PropertySerializer(prop).data)
+
+    @transaction.atomic
+    def patch(self, request, slug, project_id, property_id):
+        denied = self.check_admin(request, project_id)
+        if denied:
+            return denied
+        prop = self.get_property(slug, project_id, property_id)
+        if prop is None:
+            return _error("Property not found", status.HTTP_404_NOT_FOUND)
+        for field in ("type", "key"):
+            if field in request.data and request.data[field] != getattr(prop, field):
+                return _error(f"{field} can't change once a property exists")
+        serializer = PropertySerializer(prop, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        if "options" in data:
+            removed = {o["id"] for o in prop.options} - {o["id"] for o in data["options"]}
+            held = (
+                CustomValue.objects.filter(property=prop, value_text__in=removed).values("issue").distinct().count()
+                if removed
+                else 0
+            )
+            if held:
+                return _error(
+                    f"option {', '.join(sorted(removed))} is held by {held} work item"
+                    f"{'s' if held != 1 else ''}; disable it instead"
+                )
+        if prop.multiple and data.get("multiple") is False:
+            several = (
+                CustomValue.objects.filter(property=prop).values("issue").annotate(n=Count("id")).filter(n__gt=1)
+            )
+            if several.exists():
+                return _error(f"{several.count()} work items hold several values; clear them first")
+        prop = serializer.save()
+        return Response(PropertySerializer(prop).data)
+
+    @transaction.atomic
+    def delete(self, request, slug, project_id, property_id):
+        denied = self.check_admin(request, project_id)
+        if denied:
+            return denied
+        prop = self.get_property(slug, project_id, property_id)
+        if prop is None:
+            return _error("Property not found", status.HTTP_404_NOT_FOUND)
+        prop.delete()  # soft: values stay stored and stop being returned
+        return Response(status=status.HTTP_204_NO_CONTENT)
