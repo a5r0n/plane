@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Work item steps on the v1 API: CRUD, set-path, reorder, and steps in an item read. See FORK.md, Steps."""
+"""Work item steps: CRUD, set-path and reorder on the v1 API and for the web app, steps in an item read,
+and a step summary on list rows. See FORK.md, Steps."""
 
 import json
 import uuid
@@ -11,15 +12,19 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers, status
+from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from plane.api.views.base import BaseAPIView
 from plane.api.views.issue import IssueDetailAPIEndpoint, WorkspaceIssueAPIEndpoint
 from plane.app.permissions import ProjectEntityPermission
+from plane.authentication.session import BaseSessionAuthentication
 from plane.bgtasks.webhook_task import webhook_activity
 from plane.db.models import Issue, IssueActivity, WorkspaceMember
+from plane.ext.epics.routes import CYCLE, MODULE, P, W
 from plane.ext.models import WorkItemStep
 from plane.ext.properties import CustomFieldsMixin
+from plane.ext.rows import issue_rows
 from plane.utils.host import base_host
 
 STEP_FIELDS = ("steps", "current_step")
@@ -106,6 +111,52 @@ def steps_for(issue_ids):
     for row in plain(StepSerializer(rows, many=True).data):
         by_issue[str(row["issue"])].append(row)
     return {key: {"steps": steps, "current_step": current_of(steps)} for key, steps in by_issue.items()}
+
+
+# session list routes the web app draws lists and boards from; their rows get step_summary
+STEP_ROWS = frozenset(
+    {
+        P + "issues/",
+        P + "issues-detail/",
+        P + "v2/issues/",
+        W + "issues/",
+        W + "user-issues/<uuid:user_id>/",
+        CYCLE + "cycle-issues/",
+        MODULE + "issues/",
+    }
+)
+
+
+def step_summaries(issue_ids):
+    """issue id -> {"done", "total", "current"} for items with steps; done counts skipped steps too."""
+    out = {}
+    rows = (
+        WorkItemStep.objects.filter(issue_id__in=list(issue_ids))
+        .order_by("issue_id", *WorkItemStep.ORDER)
+        .values("issue_id", "id", "title", "actor_id", "status", "not_before")
+    )
+    for row in rows:
+        summary = out.setdefault(str(row["issue_id"]), {"done": 0, "total": 0, "current": None})
+        summary["total"] += 1
+        if row["status"] not in WorkItemStep.OPEN:
+            summary["done"] += 1
+        elif summary["current"] is None:
+            summary["current"] = plain(
+                {key: row[key] for key in ("id", "title", "status", "not_before")} | {"actor": row["actor_id"]}
+            )
+    return out
+
+
+def mark_steps(response):
+    """Add step_summary (or None) to every work item row; one query per response. Runs before render."""
+    if getattr(response, "status_code", 500) not in (200, 201) or not hasattr(response, "data"):
+        return response
+    rows = issue_rows(response.data)
+    if rows:
+        found = step_summaries({str(row["id"]) for row in rows})
+        for row in rows:
+            row["step_summary"] = found.get(str(row["id"]))
+    return response
 
 
 def apply_fields(step, data):
@@ -357,6 +408,31 @@ class StepFieldsMixin:
             if "id" not in rest and rest:
                 response.data.pop("id", None)
         return response
+
+
+class Session:
+    """The web app's twin of a v1 step view: session auth and the app's default throttles."""
+
+    authentication_classes = [BaseSessionAuthentication]
+
+    def get_throttles(self):
+        return APIView.get_throttles(self)
+
+
+class SessionStepListCreateEndpoint(Session, StepListCreateEndpoint):
+    pass
+
+
+class SessionStepDetailEndpoint(Session, StepDetailEndpoint):
+    pass
+
+
+class SessionStepSetPathEndpoint(Session, StepSetPathEndpoint):
+    pass
+
+
+class SessionStepReorderEndpoint(Session, StepReorderEndpoint):
+    pass
 
 
 class WorkItemDetailAPIEndpoint(CustomFieldsMixin, StepFieldsMixin, IssueDetailAPIEndpoint):

@@ -129,6 +129,28 @@ never change. The item read (`work-items/<id>/` and `work-items/<KEY-N>/`) retur
 `current_step` when `fields` asks for them. PQL `stepActor` matches the current step's actor:
 `!=` and `NOT IN` include items with no current step, `IS NULL` is a current step without an actor.
 
+The web app uses the same routes with session auth, under
+`/api/workspaces/<slug>/projects/<id>/issues/<item id>/steps/` (`set-path/`, `reorder/`,
+`<step id>/`). Its work item list rows carry `step_summary`: `{done, total, current}` (done counts
+`done` and `skipped`; `current` has `id`, `title`, `status`, `not_before`, `actor`), or `null` for
+an item with no steps, read in one query for the page.
+
+Web (`apps/web/core/components/squadron/steps/`):
+
+- Item page and peek: a steps panel under the description with a progress header
+  ("n/m done · next: X"). Done steps fold to one line, the current step opens as a card (Finish,
+  Failed, Skip; Retry once failed), later steps one line each, behind a failed step "held". An item
+  with no steps shows no panel, only an "Add steps" button. Failed needs a note (the UI enforces it;
+  the API doesn't). A current step whose `not_before` is in the future waits ("Start now" clears it).
+- Colours: amber when the current step's actor is the viewer, red when it failed (beats amber),
+  grey while waiting. Bots get square avatars.
+- Phone widths: a bottom "Your turn" bar for the viewer's step, and row menus open a bottom sheet
+  with Move up / Move down instead of drag.
+- List and board: a `Steps` display property (on by default) shows "n/m · current title" + actor.
+- Activity: `field` `step` rows read as "added step X", "marked failed X", "reordered the path".
+- Unit tests: `pnpm --filter=web test` (vitest, `apps/web/vitest.config.ts`); the `Web tests`
+  check runs them.
+
 ## Custom properties
 
 Typed custom fields per project (`plane/ext/properties.py`, tables `squadron_ext_custom_properties`
@@ -143,13 +165,13 @@ A property has `name`, `key` (`^[a-z][a-z0-9_]{0,63}$`, unique in the project fo
 a delete), `type` (`text`, `number`, `boolean`, `date`, `datetime`, `choice`, `member`, `url`),
 `description`, `options` (choice only: `[{id, label, disabled}]`, `id` derived from `label` when
 left out), `multiple` (choice and member only), `visible`, `write_role` (20 admin, 15 member, 5
-guest, which acts as member while upstream refuses guest writes; default 15) and `sort_order`. Only project admins write definitions. `type` and `key` never
-change; an option some item holds can't be removed (disable it), and `multiple` can't turn off while
-an item holds several values.
+guest, which acts as member while upstream refuses guest writes; default 15) and `sort_order`. Only
+project admins write definitions. `type` and `key` never change; an option some item holds can't be
+removed (disable it), and `multiple` can't turn off while an item holds several values.
 
 Values ride on the v1 work item routes (`work-items/` and `issues/`: list, create, detail, PATCH,
-and `<KEY-N>`; `epics/`: list, create, detail and children) as `custom_fields`, an object of `key: value` for every live property (unset is
-`null`, or `[]` when `multiple`). `fields=custom_fields` selects it like any field. A write sends
+and `<KEY-N>`; `epics/`: list, create, detail and children) as `custom_fields`, an object of
+`key: value` for every live property (unset is `null`, or `[]` when `multiple`). `fields=custom_fields` selects it like any field. A write sends
 only the keys it changes; `null` clears, a list replaces. The whole request is all-or-nothing: an
 unknown key, a role below the property's `write_role` (admins always pass), or a bad value answers
 400 with `{"custom_fields": {key: reason}}` and changes nothing, upstream fields included. Upstream

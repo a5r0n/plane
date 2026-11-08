@@ -5,7 +5,7 @@
  */
 
 import { beforeAll, describe, expect, inject, it } from "vitest";
-import { ApiClient } from "../src/plane";
+import { API_URL, ApiClient } from "../src/plane";
 
 const stack = inject("stack");
 const api = new ApiClient(stack.apiKey, stack.workspaceSlug);
@@ -56,5 +56,50 @@ describe("work item steps on the v1 API", () => {
     const pql = encodeURIComponent('stepActor = currentUser() AND title ~ "steps e2e"');
     const { results } = await api.call<{ results: { id: string }[] }>("GET", `${items}?pql=${pql}`);
     expect(results.map((item) => item.id)).toEqual([other]);
+  });
+});
+
+/** The web app's calls: the signed-in session, with Django's CSRF header. */
+const session = async <T>(method: string, path: string, body?: unknown): Promise<T> => {
+  const csrf = /csrftoken=([^;]+)/.exec(stack.cookie)?.[1] ?? "";
+  const response = await fetch(new URL(`/api/workspaces/${stack.workspaceSlug}/${path}`, API_URL), {
+    method,
+    headers: { cookie: stack.cookie, "x-csrftoken": csrf, referer: API_URL, "content-type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
+  return (response.status === 204 ? undefined : await response.json()) as T;
+};
+
+type Summary = { done: number; total: number; current: { title: string; status: string } | null } | null;
+type Row = { id: string; step_summary?: Summary };
+
+describe("work item steps on the web app's session routes", () => {
+  it("adds, fails, retries and finishes steps, and list rows carry the summary", async () => {
+    const itemId = (await api.call<{ id: string }>("POST", items, { name: "Steps E2E web" })).id;
+    const steps = (tail = "") => `projects/${stack.projectId}/issues/${itemId}/steps/${tail}`;
+    const summary = async () => {
+      const body = await session<{ results: Row[] | Record<string, { results: Row[] }> }>(
+        "GET",
+        `projects/${stack.projectId}/issues/?per_page=100`
+      );
+      const rows = Array.isArray(body.results) ? body.results : Object.values(body.results).flatMap((g) => g.results);
+      return rows.find((row) => row.id === itemId)?.step_summary;
+    };
+
+    expect(await summary()).toBeNull();
+    const ship = await session<Step>("POST", steps(), { title: "ship" });
+    const build = await session<Step>("POST", steps(), { title: "build", position: 0 });
+    expect((await session<Step[]>("GET", steps())).map((step) => step.title)).toEqual(["build", "ship"]);
+
+    await session<Step>("PATCH", steps(`${build.id}/`), { status: "failed", note: "red" });
+    expect((await summary())?.current).toMatchObject({ title: "build", status: "failed" });
+
+    await session<Step>("PATCH", steps(`${build.id}/`), { status: "pending", note: "" });
+    await session<Step>("PATCH", steps(`${build.id}/`), { status: "skipped" });
+    expect(await summary()).toMatchObject({ done: 1, total: 2, current: { title: "ship" } });
+
+    await session<undefined>("DELETE", steps(`${ship.id}/`));
+    expect(await summary()).toMatchObject({ done: 1, total: 1, current: null });
   });
 });
