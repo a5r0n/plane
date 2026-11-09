@@ -92,3 +92,22 @@ class CustomValue(ProjectBaseModel):
         db_table = "squadron_ext_custom_values"
         ordering = ("position",)
         indexes = [models.Index(fields=["property", "issue"], name="squadron_ext_value_prop_issue")]
+
+
+class ActivityProvenance(models.Model):
+    """How one activity was made: channel, API token and client headers (see FORK.md, Activity API)."""
+
+    class Channel(models.TextChoices):
+        API = "api"
+        APP = "app"
+
+    activity = models.OneToOneField(
+        "db.IssueActivity", on_delete=models.CASCADE, primary_key=True, related_name="squadron_provenance"
+    )
+    channel = models.CharField(max_length=8, choices=Channel.choices)
+    api_token = models.ForeignKey("db.APIToken", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    client_session = models.CharField(max_length=255, blank=True, default="")
+    client_agent = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        db_table = "squadron_ext_activity_provenance"

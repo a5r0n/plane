@@ -4,6 +4,7 @@
 
 from django.urls import path
 
+from plane.ext.activity import ActivityDetailAPIEndpoint, ActivityListAPIEndpoint
 from plane.ext.epics.urls import epic_patterns
 from plane.ext.pages import ProjectPageAPIEndpoint
 from plane.ext.properties import (
@@ -36,10 +37,14 @@ ITEMS = ("work-items", "issues")
 
 
 def step_patterns():
-    """Steps under both v1 item prefixes, the item reads that can return them, and the session twins."""
+    """Steps and activities under both v1 item prefixes, the item reads that can return them, and the session twins."""
     for items in ITEMS:
         item = f"{PROJECT}{items}/<uuid:issue_id>/"
         steps = item + "steps/"
+        yield path(item + "activities/", ActivityListAPIEndpoint.as_view(), name=f"squadron-{items}-activities")
+        yield path(
+            item + "activities/<uuid:pk>/", ActivityDetailAPIEndpoint.as_view(), name=f"squadron-{items}-activity"
+        )
         yield path(steps, StepListCreateEndpoint.as_view(), name=f"squadron-{items}-steps")
         yield path(steps + "set-path/", StepSetPathEndpoint.as_view(), name=f"squadron-{items}-steps-set-path")
         yield path(steps + "reorder/", StepReorderEndpoint.as_view(), name=f"squadron-{items}-steps-reorder")
