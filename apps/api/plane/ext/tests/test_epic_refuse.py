@@ -42,13 +42,17 @@ def assert_refused(r, epic, target):
 
 
 def test_session_cycle_refuses_an_epic(session_client, url, cycle, epic, normal):
-    r = session_client.post(url(f"cycles/{cycle.id}/cycle-issues/"), {"issues": [str(normal.id), str(epic.id)]}, format="json")
+    r = session_client.post(
+        url(f"cycles/{cycle.id}/cycle-issues/"), {"issues": [str(normal.id), str(epic.id)]}, format="json"
+    )
     assert_refused(r, epic, "cycle")
     assert not CycleIssue.objects.filter(cycle=cycle).exists()
 
 
 def test_session_cycle_still_takes_work_items(session_client, url, cycle, normal, child_of_epic):
-    r = session_client.post(url(f"cycles/{cycle.id}/cycle-issues/"), {"issues": [str(normal.id), str(child_of_epic.id)]}, format="json")
+    r = session_client.post(
+        url(f"cycles/{cycle.id}/cycle-issues/"), {"issues": [str(normal.id), str(child_of_epic.id)]}, format="json"
+    )
     assert r.status_code == 201, r.content
     assert CycleIssue.objects.filter(cycle=cycle).count() == 2
 

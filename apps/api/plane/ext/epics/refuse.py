@@ -41,7 +41,9 @@ def epics_among(ids):
             continue  # upstream answers bad ids its own way
     if not parsed:
         return []
-    return sorted(str(pk) for pk in Issue.objects.filter(pk__in=parsed, type__is_epic=True).values_list("pk", flat=True))
+    return sorted(
+        str(pk) for pk in Issue.objects.filter(pk__in=parsed, type__is_epic=True).values_list("pk", flat=True)
+    )
 
 
 class RefuseEpicsMixin:
