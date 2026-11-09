@@ -6,6 +6,7 @@ from django.urls import path
 
 from plane.ext.epics.urls import epic_patterns
 from plane.ext.pages import ProjectPageAPIEndpoint
+from plane.ext.properties import PropertyDetailEndpoint, PropertyListCreateEndpoint
 from plane.ext.relations import WorkItemRelationRemoveEndpoint
 from plane.ext.search import WorkItemSearchEndpoint
 from plane.ext.steps import (
@@ -92,6 +93,16 @@ urlpatterns = [
         name="squadron-work-item-relation-remove",
     ),
     *step_patterns(),
+    path(
+        PROJECT + "properties/",
+        PropertyListCreateEndpoint.as_view(http_method_names=["get", "post"]),
+        name="squadron-properties",
+    ),
+    path(
+        PROJECT + "properties/<uuid:property_id>/",
+        PropertyDetailEndpoint.as_view(http_method_names=["get", "patch", "delete"]),
+        name="squadron-property",
+    ),
 ]
 
 # epic routes and list shadows resolve before ours and upstream's

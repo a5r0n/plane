@@ -23,6 +23,7 @@ from plane.bgtasks.webhook_task import webhook_activity
 from plane.db.models import Issue, IssueActivity, WorkspaceMember
 from plane.ext.epics.routes import CYCLE, MODULE, P, W
 from plane.ext.models import WorkItemStep
+from plane.ext.properties import CustomFieldsMixin
 from plane.ext.rows import issue_rows
 from plane.utils.host import base_host
 
@@ -434,9 +435,9 @@ class SessionStepReorderEndpoint(Session, StepReorderEndpoint):
     pass
 
 
-class WorkItemDetailAPIEndpoint(StepFieldsMixin, IssueDetailAPIEndpoint):
+class WorkItemDetailAPIEndpoint(CustomFieldsMixin, StepFieldsMixin, IssueDetailAPIEndpoint):
     pass
 
 
-class WorkItemByIdentifierAPIEndpoint(StepFieldsMixin, WorkspaceIssueAPIEndpoint):
+class WorkItemByIdentifierAPIEndpoint(CustomFieldsMixin, StepFieldsMixin, WorkspaceIssueAPIEndpoint):
     pass

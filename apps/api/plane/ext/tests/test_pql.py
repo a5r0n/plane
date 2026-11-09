@@ -3,13 +3,15 @@
 # See the LICENSE file for details.
 
 import uuid
-from datetime import timedelta
+from datetime import date, datetime, timedelta, timezone as dt_timezone
+from decimal import Decimal
 
 import pytest
 from django.urls import resolve
 from django.utils import timezone
 
 from plane.db.models import Issue, IssueAssignee, IssueLabel, Label, State, User, WorkspaceMember
+from plane.ext.models import CustomProperty, CustomValue
 from plane.ext.pql import Context, PQLError, compile_pql
 from plane.ext.tests.conftest import make_issue, make_project
 from plane.ext.work_items import WorkItemListCreateAPIEndpoint
@@ -53,6 +55,9 @@ def test_list_routes_resolve_to_ext_view(tail):
         ("dueDate > daysFromNow(3000000)", "out of the date range"),
         ("(" * 2000 + 'priority = "high"' + ")" * 2000, "nests ( or NOT more than"),
         ("NOT " * 2000 + 'priority = "high"', "nests ( or NOT more than"),
+        ("dueDate < daysAgo(1.5)", "whole number of days"),
+        ('prop.repo = "plane"', "a project's work item list"),
+        ('label.x = "a"', "unsupported field 'label.x'"),
     ],
 )
 def test_rejects_with_a_reason(pql, complaint):
@@ -182,3 +187,111 @@ class TestListWithPQL:
     def test_create_still_works(self, api_key_client, setup):
         response = api_key_client.post(setup["url"] + "work-items/", {"name": "Created"}, format="json")
         assert response.status_code == 201
+
+
+@pytest.fixture
+def props(db, workspace, create_user):
+    """Items A, B and an unset C, over one property of each type."""
+    project = make_project(workspace, create_user, "Props", "PR")
+    options = [{"id": i, "label": i.title(), "disabled": i == "old"} for i in ("plane", "mcp", "old")]
+    T = CustomProperty.Type
+
+    def define(key, type, **fields):
+        return CustomProperty.objects.create(
+            project=project, workspace=workspace, name=key.title(), key=key, type=type, **fields
+        )
+
+    defs = {
+        "repo": define("repo", T.CHOICE, options=options),
+        "tags": define("tags", T.CHOICE, options=options, multiple=True),
+        "count": define("count", T.NUMBER),
+        "done": define("done", T.BOOLEAN),
+        "when": define("when", T.DATE),
+        "at": define("at", T.DATETIME),
+        "owner": define("owner", T.MEMBER),
+        "note": define("note", T.TEXT),
+        "site": define("site", T.URL),
+        "gone": define("gone", T.TEXT),
+    }
+    a, b, c = (make_issue(project, name) for name in ("A", "B", "C"))
+
+    def hold(issue, key, **column):
+        CustomValue.objects.create(project=project, workspace=workspace, issue=issue, property=defs[key], **column)
+
+    hold(a, "repo", value_text="plane")
+    hold(b, "repo", value_text="old")
+    hold(a, "tags", value_text="plane", position=0)
+    hold(a, "tags", value_text="mcp", position=1)
+    hold(b, "tags", value_text="mcp")
+    hold(a, "count", value_number=Decimal("2.5"))
+    hold(b, "count", value_number=3)
+    hold(a, "done", value_bool=True)
+    hold(b, "done", value_bool=False)
+    hold(a, "when", value_date=date(2025, 6, 1))
+    hold(b, "when", value_date=date(2026, 6, 1))
+    hold(a, "at", value_datetime=datetime(2026, 1, 1, 12, tzinfo=dt_timezone.utc))
+    hold(a, "owner", value_member=create_user)
+    hold(a, "note", value_text="Fix login")
+    hold(b, "note", value_text="docs")
+    hold(b, "site", value_text="https://example.com/fix")
+    hold(a, "gone", value_text="x")
+    defs["gone"].delete()  # soft delete; its key stays reserved and unknown to PQL
+    return f"/api/v1/workspaces/{workspace.slug}/projects/{project.id}/work-items/"
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+class TestProperties:
+    @pytest.mark.parametrize(
+        "pql, expected",
+        [
+            ('prop.repo = "plane"', ["A"]),
+            ('prop.repo != "plane"', ["B", "C"]),
+            ('prop.repo = "old"', ["B"]),  # a disabled option still filters
+            ('prop.repo IN ("plane", "old")', ["A", "B"]),
+            ('prop.repo NOT IN ("plane")', ["B", "C"]),
+            ("prop.repo IS NULL", ["C"]),
+            ("prop.repo IS NOT NULL", ["A", "B"]),
+            ('prop.tags = "mcp"', ["A", "B"]),
+            ('prop.tags != "plane"', ["B", "C"]),
+            ("prop.count > 2", ["A", "B"]),
+            ("prop.count = 2.5", ["A"]),
+            ("prop.count <= 2.5", ["A"]),
+            ("prop.count != 3", ["A", "C"]),
+            ("prop.done = TRUE", ["A"]),
+            ("prop.done = FALSE", ["B"]),
+            ('prop.when < "2026-01-01"', ["A"]),
+            ("prop.when > daysAgo(3650)", ["A", "B"]),
+            ('prop.at >= "2026-01-01T12:00:00Z"', ["A"]),
+            ('prop.at < "2026-01-01T13:00:00+02:00"', []),
+            ("prop.owner = currentUser()", ["A"]),
+            ('prop.note ~ "fix"', ["A"]),
+            ('prop.note = "docs"', ["B"]),
+            ('prop.site ~ "/fix"', ["B"]),
+            ('prop.repo = "old" AND prop.count > 2', ["B"]),
+            ("NOT prop.done = TRUE", ["B", "C"]),
+        ],
+    )
+    def test_filters(self, api_key_client, props, pql, expected):
+        assert names(api_key_client.get(props, {"pql": pql})) == expected
+
+    @pytest.mark.parametrize(
+        "pql, complaint",
+        [
+            ('prop.nope = "x"', "unknown property 'prop.nope'"),
+            ('prop.gone = "x"', "unknown property 'prop.gone'"),
+            ('prop.repo > "a"', "'>' works on number, date and datetime properties"),
+            ('prop.count ~ "1"', "'~' works on text and url properties"),
+            ('prop.repo = "nope"', "prop.repo is one of plane, mcp, old"),
+            ('prop.count = "3"', "prop.count takes a number"),
+            ('prop.done = "yes"', "prop.done takes TRUE or FALSE"),
+            ('prop.owner = "abc"', "prop.owner takes a user id"),
+            ('prop.when = "June"', "dates are YYYY-MM-DD"),
+            ('prop.at = "2026-01-01T12:00:00"', "prop.at takes an ISO 8601 timestamp with a time zone"),
+            ("prop.note = currentUser()", "currentUser() fits"),
+        ],
+    )
+    def test_rejects_with_a_reason(self, api_key_client, props, pql, complaint):
+        response = api_key_client.get(props, {"pql": pql})
+        assert response.status_code == 400
+        assert complaint in response.data["pql"]
