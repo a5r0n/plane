@@ -148,7 +148,7 @@ UNEXERCISED = {
     r"(archive/$|archived-)": "nothing is archived; archived epics have no list of their own",
     r"(members|invitations|join|api-tokens|accounts|preferences|me/profile|me/settings|themes|quick-links|stickies"
     r"|favorite|webhook|notifications|last-visited)": "people and settings, not work items",
-    r"/(labels|issue-labels|states|estimates|pages|views|analytic-view|draft-issues|project-deploy-boards)"
+    r"/(labels|issue-labels|states|estimates|pages|properties|views|analytic-view|draft-issues|project-deploy-boards)"
     r"/<\w+:\w+>/": "one object of a kind the sweep doesn't make",
     r"(cycle-issues|modules/<uuid:module_id>/issues)/<uuid:issue_id>/$": "upstream answers a bare GET with 500",
     r"^(workspaces/|workspace-slug-check/|workspaces/<str:slug>/(export-issues|project-identifiers)/)$": (

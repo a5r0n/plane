@@ -2,23 +2,26 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""The v1 project work item list, with `pql` filtering (plane.ext.pql) on top of upstream's."""
+"""The v1 project work item list, with `pql` filtering (plane.ext.pql) and custom_fields on top of upstream's."""
 
 from rest_framework import status
 from rest_framework.response import Response
 
 from plane.api.views.issue import IssueListCreateAPIEndpoint
 from plane.ext.pql import Context, PQLError, compile_pql
+from plane.ext.properties import CustomFieldsMixin
 
 
-class WorkItemListCreateAPIEndpoint(IssueListCreateAPIEndpoint):
+class WorkItemListCreateAPIEndpoint(CustomFieldsMixin, IssueListCreateAPIEndpoint):
     pql_q = None
 
     def get(self, request, slug, project_id):
         pql = request.GET.get("pql")
         if pql:
             try:
-                self.pql_q = compile_pql(pql, Context(user_id=request.user.id, workspace_slug=slug))
+                self.pql_q = compile_pql(
+                    pql, Context(user_id=request.user.id, workspace_slug=slug, project_id=project_id)
+                )
             except PQLError as exc:
                 return Response({"pql": f"Invalid PQL: {exc}"}, status=status.HTTP_400_BAD_REQUEST)
             # upstream refuses any pql; it has been compiled, so hand upstream the rest

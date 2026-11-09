@@ -14,6 +14,8 @@ from plane.db.models import Issue
 from plane.ext.epics import routes
 from plane.ext.epics.refuse import refusing
 from plane.ext.epics.scope import epic_scope
+from plane.ext.rows import issue_rows
+from plane.ext.steps import STEP_ROWS, mark_steps
 from plane.ext.epics.views import (
     EpicChildrenAPIEndpoint,
     EpicDetailAPIEndpoint,
@@ -54,23 +56,11 @@ def render_in_scope(response):
     return response.render() if hasattr(response, "render") and not response.is_rendered else response
 
 
-def _issue_rows(data, found):
-    if isinstance(data, dict):
-        if "id" in data and "sequence_id" in data:
-            found.append(data)
-        for value in data.values():
-            _issue_rows(value, found)
-    elif isinstance(data, list):
-        for value in data:
-            _issue_rows(value, found)
-    return found
-
-
 def mark_epics(response):
     """Add is_epic to every issue row; the web app reads it to pick the epic view. Runs before render."""
     if getattr(response, "status_code", 500) not in (200, 201) or not hasattr(response, "data"):
         return response
-    rows = _issue_rows(response.data, [])
+    rows = issue_rows(response.data)
     if rows:
         epic_ids = {
             str(pk)
@@ -99,6 +89,7 @@ def scoped(view, mode, mark=False):
             response = view(request, *args, **kwargs)
             if mark and request.method in ("GET", "POST"):
                 mark_epics(response)
+                mark_steps(response)
             return render_in_scope(response)
 
     return wrapper
@@ -111,7 +102,10 @@ def hide_get(view, route):
         if route == routes.SEARCH_ISSUES and request.GET.get("issue_id"):
             hidden = False  # parent lookup by id, which may be an epic
         with epic_scope("exclude" if hidden else "all"):
-            return render_in_scope(view(request, *args, **kwargs))
+            response = view(request, *args, **kwargs)
+            if request.method == "GET" and route in STEP_ROWS:
+                mark_steps(response)
+            return render_in_scope(response)
 
     return wrapper
 

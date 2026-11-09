@@ -87,7 +87,8 @@ CE refuses any `pql`. The query is compiled by `plane/ext/pql.py`, a subset of P
 
 - fields: `priority`, `stateGroup`, `state`, `assignee`, `label`, `createdBy`, `project`, `parent`,
   `stepActor` (the current step's actor; see Steps) (UUIDs where Plane takes ids), `title` (`~`
-  only), and the dates `dueDate`, `startDate`, `createdAt`, `updatedAt`;
+  only), the dates `dueDate`, `startDate`, `createdAt`, `updatedAt`, and `prop.<key>` (a custom
+  property of the listed project; see Custom properties);
 - operators: `=`, `!=`, `IN (...)`, `NOT IN (...)`, `~` (contains, case-insensitive),
   `<`, `<=`, `>`, `>=` (dates only), `IS NULL`, `IS NOT NULL`, with `AND`, `OR`, `NOT` and
   parentheses. Keywords are case-insensitive; strings take either quote;
@@ -127,6 +128,72 @@ and after commit sends the issue webhook as an `updated` with `field` `step`. St
 never change. The item read (`work-items/<id>/` and `work-items/<KEY-N>/`) returns `steps` and
 `current_step` when `fields` asks for them. PQL `stepActor` matches the current step's actor:
 `!=` and `NOT IN` include items with no current step, `IS NULL` is a current step without an actor.
+
+The web app uses the same routes with session auth, under
+`/api/workspaces/<slug>/projects/<id>/issues/<item id>/steps/` (`set-path/`, `reorder/`,
+`<step id>/`). Its work item list rows carry `step_summary`: `{done, total, current}` (done counts
+`done` and `skipped`; `current` has `id`, `title`, `status`, `not_before`, `actor`), or `null` for
+an item with no steps, read in one query for the page.
+
+Web (`apps/web/core/components/squadron/steps/`):
+
+- Item page and peek: a steps panel under the description with a progress header
+  ("n/m done · next: X"). Done steps fold to one line, the current step opens as a card (Finish,
+  Failed, Skip; Retry once failed), later steps one line each, behind a failed step "held". An item
+  with no steps shows no panel, only an "Add steps" button. Failed needs a note (the UI enforces it;
+  the API doesn't). A current step whose `not_before` is in the future waits ("Start now" clears it).
+- Colours: amber when the current step's actor is the viewer, red when it failed (beats amber),
+  grey while waiting. Bots get square avatars.
+- Phone widths: a bottom "Your turn" bar for the viewer's step, and row menus open a bottom sheet
+  with Move up / Move down instead of drag.
+- List and board: a `Steps` display property (on by default) shows "n/m · current title" + actor.
+- Activity: `field` `step` rows read as "added step X", "marked failed X", "reordered the path".
+- Unit tests: `pnpm --filter=web test` (vitest, `apps/web/vitest.config.ts`); the `Web tests`
+  check runs them.
+
+## Custom properties
+
+Typed custom fields per project (`plane/ext/properties.py`, tables `squadron_ext_custom_properties`
+and `squadron_ext_custom_values`).
+
+Definitions, v1, API key, under `workspaces/<slug>/projects/<id>/`:
+
+- `properties/`: GET lists them (any project member); POST creates one;
+- `properties/<property id>/`: GET, PATCH, DELETE (a soft delete; its values stop showing).
+
+A property has `name`, `key` (`^[a-z][a-z0-9_]{0,63}$`, unique in the project for good, even after
+a delete), `type` (`text`, `number`, `boolean`, `date`, `datetime`, `choice`, `member`, `url`),
+`description`, `options` (choice only: `[{id, label, disabled}]`, `id` derived from `label` when
+left out), `multiple` (choice and member only), `visible`, `write_role` (20 admin, 15 member, 5
+guest, which acts as member while upstream refuses guest writes; default 15) and `sort_order`. Only
+project admins write definitions. `type` and `key` never change; an option some item holds can't be
+removed (disable it), and `multiple` can't turn off while an item holds several values.
+
+Values ride on the v1 work item routes (`work-items/` and `issues/`: list, create, detail, PATCH,
+and `<KEY-N>`; `epics/`: list, create, detail and children) as `custom_fields`, an object of
+`key: value` for every live property (unset is `null`, or `[]` when `multiple`). `fields=custom_fields` selects it like any field. A write sends
+only the keys it changes; `null` clears, a list replaces. The whole request is all-or-nothing: an
+unknown key, a role below the property's `write_role` (admins always pass), or a bad value answers
+400 with `{"custom_fields": {key: reason}}` and changes nothing, upstream fields included. Upstream
+saves first; the values follow in their own transaction, re-checked under the item's lock. If a
+property or option changed in between, the rest is saved and 409 names the unwritten keys in the
+same body. `custom_fields` must be sent as JSON; a form or multipart write with it answers 400.
+Choice values are option ids (enabled ones; a held disabled option may be resent), members are
+active project members (a held one who left may be resent), numbers are finite, below 1e20 and
+rounded to 10 decimal places, datetimes carry a time zone and are stored in UTC, text is one line
+up to 255, URLs are http(s).
+
+Each changed property adds one `IssueActivity` row (`field` `custom_fields`, comment `updated
+<name>`, old and new values as display text), and the write bumps `updated_at` and sends one issue
+webhook after commit (`field` `custom_fields`, old and new objects of the changed keys). Upstream's
+own webhook payloads don't carry `custom_fields`. Values belong to the property, so an item moved
+to another project shows that project's properties; its old values stay hidden.
+
+PQL `prop.<key>` filters the project list (`=`, `!=`, `IN`, `NOT IN`, `IS [NOT] NULL` on every type;
+`~` on text and url; `<`, `<=`, `>`, `>=` on number, date and datetime). Values are quoted except
+numbers and `TRUE`/`FALSE`; choice takes option ids (disabled ones too), member takes a user id or
+`currentUser()`, date takes `today()` and `daysAgo(n)` too. On a multiple property `=` means
+"holds". `!=` and `NOT IN` include items with no value. An unknown or deleted key answers 400.
 
 ## Epics
 

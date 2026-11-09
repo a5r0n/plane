@@ -6,9 +6,14 @@ from django.urls import path
 
 from plane.ext.epics.urls import epic_patterns
 from plane.ext.pages import ProjectPageAPIEndpoint
+from plane.ext.properties import PropertyDetailEndpoint, PropertyListCreateEndpoint
 from plane.ext.relations import WorkItemRelationRemoveEndpoint
 from plane.ext.search import WorkItemSearchEndpoint
 from plane.ext.steps import (
+    SessionStepDetailEndpoint,
+    SessionStepListCreateEndpoint,
+    SessionStepReorderEndpoint,
+    SessionStepSetPathEndpoint,
     StepDetailEndpoint,
     StepListCreateEndpoint,
     StepReorderEndpoint,
@@ -24,7 +29,7 @@ ITEMS = ("work-items", "issues")
 
 
 def step_patterns():
-    """Steps under both item prefixes, plus the item reads that can return them."""
+    """Steps under both v1 item prefixes, the item reads that can return them, and the session twins."""
     for items in ITEMS:
         item = f"{PROJECT}{items}/<uuid:issue_id>/"
         steps = item + "steps/"
@@ -42,6 +47,12 @@ def step_patterns():
             WorkItemByIdentifierAPIEndpoint.as_view(http_method_names=["get"]),
             name=f"squadron-{items}-by-identifier",
         )
+    # the web app's session twins
+    steps = "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/steps/"
+    yield path(steps, SessionStepListCreateEndpoint.as_view(), name="squadron-session-steps")
+    yield path(steps + "set-path/", SessionStepSetPathEndpoint.as_view(), name="squadron-session-steps-set-path")
+    yield path(steps + "reorder/", SessionStepReorderEndpoint.as_view(), name="squadron-session-steps-reorder")
+    yield path(steps + "<uuid:step_id>/", SessionStepDetailEndpoint.as_view(), name="squadron-session-step")
 
 
 urlpatterns = [
@@ -82,6 +93,16 @@ urlpatterns = [
         name="squadron-work-item-relation-remove",
     ),
     *step_patterns(),
+    path(
+        PROJECT + "properties/",
+        PropertyListCreateEndpoint.as_view(http_method_names=["get", "post"]),
+        name="squadron-properties",
+    ),
+    path(
+        PROJECT + "properties/<uuid:property_id>/",
+        PropertyDetailEndpoint.as_view(http_method_names=["get", "patch", "delete"]),
+        name="squadron-property",
+    ),
 ]
 
 # epic routes and list shadows resolve before ours and upstream's

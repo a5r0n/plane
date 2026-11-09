@@ -7,13 +7,15 @@
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from plane.db.models import Issue, IssueAssignee, IssueLabel
-from plane.ext.models import WorkItemStep
+from plane.ext.models import CustomProperty, CustomValue, WorkItemStep
+from plane.ext.properties import COLUMN, T
 
 
 class PQLError(ValueError):
@@ -24,15 +26,16 @@ class PQLError(ValueError):
 class Context:
     user_id: uuid.UUID
     workspace_slug: str
+    project_id: uuid.UUID | None = None  # the listed project; prop.<key> needs it
 
 
 TOKEN = re.compile(
     r"""\s*(?:
         (?P<string>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')
-      | (?P<number>-?\d+)
+      | (?P<number>-?\d+(?:\.\d+)?)
       | (?P<op>!=|<=|>=|=|<|>|~)
       | (?P<punct>[(),])
-      | (?P<word>[A-Za-z_][A-Za-z0-9_]*)
+      | (?P<word>[A-Za-z_][A-Za-z0-9_]*(?:\.[a-z][a-z0-9_]*)?)
     )""",
     re.VERBOSE,
 )
@@ -110,6 +113,7 @@ class Parser:
         self.pos = 0
         self.depth = 0
         self.context = context
+        self.props = {}
 
     # token helpers
     def peek(self, offset=0):
@@ -177,6 +181,8 @@ class Parser:
             raise PQLError(f"expected a field or function, got {name!r}")
         if self.peek() == ("punct", "("):
             return self.predicate(name)
+        if name.startswith("prop."):
+            return self.prop_comparison(name, self.prop(name))
         if name not in FIELDS:
             raise PQLError(f"unsupported field {name!r}; supported: {', '.join(sorted(FIELDS))}")
         return self.comparison(name)
@@ -280,7 +286,7 @@ class Parser:
         if kind == "word" and value in DAY_FUNCTIONS:
             self.expect("punct", "(")
             sign_kind, days = self.take()
-            if sign_kind != "number":
+            if sign_kind != "number" or "." in days:
                 raise PQLError(f"{value}() takes a whole number of days")
             self.expect("punct", ")")
             try:
@@ -344,6 +350,96 @@ class Parser:
             .first()
         )
         return found or uuid.UUID(int=0)
+
+    # custom properties: prop.<key>, a property of the listed project
+    def prop(self, name):
+        if self.context.project_id is None:
+            raise PQLError(f"{name} works only on a project's work item list")
+        if name not in self.props:
+            self.props[name] = CustomProperty.objects.filter(project_id=self.context.project_id, key=name[5:]).first()
+        if self.props[name] is None:
+            raise PQLError(f"unknown property {name!r}")
+        return self.props[name]
+
+    def prop_comparison(self, name, prop):
+        column = COLUMN[prop.type]
+
+        def holds(**lookup):
+            return Q(Exists(CustomValue.objects.filter(issue_id=OuterRef("pk"), property=prop, **lookup)))
+
+        # negations are "doesn't hold", so they include items with no value
+        if self.accept("keyword", "IS"):
+            negate = self.accept("keyword", "NOT")
+            self.expect("keyword", "NULL")
+            return holds() if negate else ~holds()
+        if self.accept("keyword", "NOT"):
+            self.expect("keyword", "IN")
+            return ~holds(**{f"{column}__in": self.prop_values(name, prop)})
+        if self.accept("keyword", "IN"):
+            return holds(**{f"{column}__in": self.prop_values(name, prop)})
+        kind, op = self.take()
+        if kind != "op":
+            raise PQLError(f"expected an operator after {name!r}, got {op!r}")
+        if op == "~":
+            if prop.type not in (T.TEXT, T.URL):
+                raise PQLError(f"'~' works on text and url properties, not {name!r}")
+            return holds(**{f"{column}__icontains": self.text_value()})
+        if op in COMPARE:
+            if prop.type not in (T.NUMBER, T.DATE, T.DATETIME):
+                raise PQLError(f"{op!r} works on number, date and datetime properties, not {name!r}")
+            return holds(**{f"{column}__{COMPARE[op]}": self.prop_value(name, prop)})
+        q = holds(**{column: self.prop_value(name, prop)})
+        return ~q if op == "!=" else q
+
+    def prop_values(self, name, prop):
+        if not self.accept("punct", "("):
+            return [self.prop_value(name, prop)]
+        items = [self.prop_value(name, prop)]
+        while self.accept("punct", ","):
+            items.append(self.prop_value(name, prop))
+        self.expect("punct", ")")
+        return items
+
+    def prop_value(self, name, prop):
+        if prop.type == T.DATE:
+            return self.date_value()
+        kind, value = self.take()
+        if prop.type == T.NUMBER:
+            if kind != "number":
+                raise PQLError(f"{name} takes a number, not {value!r}")
+            return Decimal(value)
+        if prop.type == T.BOOLEAN:
+            if kind != "keyword" or value not in ("TRUE", "FALSE"):
+                raise PQLError(f"{name} takes TRUE or FALSE, not {value!r}")
+            return value == "TRUE"
+        if kind == "word" and self.peek() == ("punct", "("):
+            self.expect("punct", "(")
+            self.expect("punct", ")")
+            if value != "currentUser":
+                raise PQLError(f"unsupported function {value}()")
+            if prop.type != T.MEMBER:
+                raise PQLError(f"currentUser() fits assignee, createdBy, stepActor or a member property, not {name!r}")
+            return self.context.user_id
+        if kind != "string":
+            raise PQLError(f"expected a quoted value for {name!r}, got {value!r}")
+        if prop.type == T.CHOICE:
+            ids = [option["id"] for option in prop.options]  # disabled options still filter
+            if value not in ids:
+                raise PQLError(f"{name} is one of {', '.join(ids)}, not {value!r}")
+        if prop.type == T.MEMBER:
+            try:
+                return uuid.UUID(value)
+            except ValueError:
+                raise PQLError(f"{name} takes a user id, not {value!r}") from None
+        if prop.type == T.DATETIME:
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                parsed = None
+            if parsed is None or parsed.tzinfo is None:
+                raise PQLError(f"{name} takes an ISO 8601 timestamp with a time zone, not {value!r}")
+            return parsed
+        return value
 
 
 def compile_pql(text, context):
