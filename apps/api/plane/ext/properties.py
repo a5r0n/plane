@@ -15,6 +15,7 @@ from django.http import QueryDict
 from django.db.models import Count, F
 from django.utils import timezone
 from rest_framework import serializers, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from plane.api.views.base import BaseAPIView
@@ -23,6 +24,7 @@ from plane.bgtasks.webhook_task import webhook_activity
 from plane.db.models import Issue, IssueActivity, Project, ProjectMember, User
 from plane.utils.host import base_host
 from plane.ext.models import CustomProperty, CustomValue
+from plane.ext.session import Session
 
 T = CustomProperty.Type
 KEY_RE = r"^[a-z][a-z0-9_]{0,63}$"
@@ -220,6 +222,11 @@ def _current(issue_id, props):
     return current
 
 
+def can_write(role, prop):
+    """Whether a project role (0: not a member) may set prop's values."""
+    return role == ADMIN or role >= prop.write_role
+
+
 def validate_values(user, project_id, payload, issue_id=None):
     """-> ([(prop, new column values)], errors); errors is {"custom_fields": ...} or {}."""
     if not isinstance(payload, dict):
@@ -234,7 +241,7 @@ def validate_values(user, project_id, payload, issue_id=None):
         if prop is None:
             errors[key] = "no such property in this project"
             continue
-        if role != ADMIN and role < prop.write_role:
+        if not can_write(role, prop):
             errors[key] = f"needs project role {prop.get_write_role_display()} or above to set"
             continue
         held = {_key(prop, as_json(prop, value)): value for value in current.get(prop.id, [])}
@@ -559,3 +566,70 @@ class PropertyDetailEndpoint(PropertyBase):
             return _error("Property not found", status.HTTP_404_NOT_FOUND)
         prop.delete()  # soft: values stay stored and stop being returned
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# the web app's session twins
+
+
+class SessionPropertyListCreateEndpoint(Session, PropertyListCreateEndpoint):
+    pass
+
+
+class SessionPropertyDetailEndpoint(Session, PropertyDetailEndpoint):
+    pass
+
+
+GUEST = 5
+
+
+class ItemCustomFieldsEndpoint(Session, BaseAPIView):
+    """One item's values and which of them the viewer may set; guests included, as write_role allows."""
+
+    permission_classes = [IsAuthenticated]  # membership and item visibility are checked below
+
+    def _find(self, request, slug, project_id, issue_id):
+        """-> (role, issue, None) or (None, None, error response)."""
+        member = ProjectMember.objects.filter(
+            project_id=project_id, project__workspace__slug=slug, member=request.user, is_active=True
+        ).first()
+        if member is None:
+            return None, None, _error("You are not a member of this project", status.HTTP_403_FORBIDDEN)
+        issue = (
+            Issue.objects.filter(pk=issue_id, project_id=project_id, workspace__slug=slug)
+            .select_related("project")
+            .first()
+        )
+        hidden = (
+            issue is not None
+            and member.role == GUEST
+            and not issue.project.guest_view_all_features
+            and issue.created_by_id != request.user.id
+        )
+        if issue is None or hidden:
+            return None, None, _error("Work item not found", status.HTTP_404_NOT_FOUND)
+        return member.role, issue, None
+
+    def _body(self, role, issue):
+        props = CustomProperty.objects.filter(project_id=issue.project_id)
+        return {
+            "values": values_for([issue.id]).get(str(issue.id), {}),
+            "can_write": {prop.key: can_write(role, prop) for prop in props},
+        }
+
+    def get(self, request, slug, project_id, issue_id):
+        role, issue, denied = self._find(request, slug, project_id, issue_id)
+        if denied:
+            return denied
+        return Response(self._body(role, issue))
+
+    def patch(self, request, slug, project_id, issue_id):
+        role, issue, denied = self._find(request, slug, project_id, issue_id)
+        if denied:
+            return denied
+        with transaction.atomic():
+            Issue.all_objects.select_for_update(of=("self",)).get(pk=issue.id)
+            plan, errors = validate_values(request.user, project_id, request.data, issue.id)
+            if errors:
+                return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+            write_values(request, issue.id, plan)
+        return Response(self._body(role, issue))
