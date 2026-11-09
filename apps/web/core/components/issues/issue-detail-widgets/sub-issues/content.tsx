@@ -89,7 +89,9 @@ export const SubIssuesCollapsibleContent = observer(function SubIssuesCollapsibl
       try {
         setSubIssueHelpers(`${parentIssueId}_root`, "preview_loader", parentIssueId);
         await subIssueOperations.fetchSubIssues(workspaceSlug, projectId, parentIssueId);
-        setSubIssueHelpers(`${parentIssueId}_root`, "issue_visibility", parentIssueId);
+        // squadron: show only if still hidden; a concurrent run (StrictMode) may have toggled it already
+        if (!subIssueHelpersByIssueId(`${parentIssueId}_root`).issue_visibility.includes(parentIssueId))
+          setSubIssueHelpers(`${parentIssueId}_root`, "issue_visibility", parentIssueId);
       } catch (error) {
         console.error("Error fetching sub-work items:", error);
       } finally {
