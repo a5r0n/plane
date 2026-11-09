@@ -195,6 +195,24 @@ numbers and `TRUE`/`FALSE`; choice takes option ids (disabled ones too), member 
 `currentUser()`, date takes `today()` and `daysAgo(n)` too. On a multiple property `=` means
 "holds". `!=` and `NOT IN` include items with no value. An unknown or deleted key answers 400.
 
+## Activity API
+
+`plane/ext/activity.py` shadows upstream's v1 `activities/` and `activities/<id>/` under both
+`work-items/` and `issues/`. Same rows and filters as upstream, except comment rows are kept (vote,
+reaction and draft rows stay hidden). Each row adds `provenance`: `null` when unknown, else
+`{channel, token, session, agent}`.
+
+- `channel` is `api` (an `X-Api-Key` request) or `app` (a session).
+- `token` is `{id, label}` of the API key, `null` once that key is deleted; the key itself is never shown.
+- `session` and `agent` come from the optional `X-Client-Session` and `X-Client-Agent` request
+  headers (up to 255 characters each), `null` when absent.
+
+How it's recorded (`plane/ext/provenance.py`): a `before_task_publish` handler stamps the
+`squadron_provenance` header on each `issue_activity` message sent during a request. The task's
+hook (see Hook log) writes one row per activity into `squadron_ext_activity_provenance` (migration
+`0003`). Only rows written by that task carry provenance; rows written inline (steps, custom
+properties) show `null`. A provenance failure is logged and never loses the activity.
+
 ## Epics
 
 An epic is a work item whose type has `is_epic` set. `plane.ext` creates one `Epic` type per
@@ -313,6 +331,8 @@ API token, project), then checks cross-service flows:
 - `tests/mcp.test.ts`: a smoke run of `plane-mcp-server`, pinned by SHA in `src/mcp.ts`, over
   stdio.
 - `tests/epics.test.ts`: the v1 API refusing an epic in a cycle or module.
+- `tests/activity.test.ts`: the fork's activity routes and their `provenance` key. There's no
+  celery worker in the stack, so comment rows and recorded provenance are covered in pytest.
 
 Add a flow as a new `tests/<area>.test.ts`; `inject("stack")` gives it the user, workspace,
 project and API key. To run it locally (needs Node, pnpm and `uv`):

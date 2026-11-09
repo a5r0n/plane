@@ -10,6 +10,10 @@ class SquadronExtConfig(AppConfig):
     label = "squadron_ext"
 
     def ready(self):
+        from celery.signals import before_task_publish
+
         from plane.ext.epics.joins import install
+        from plane.ext.provenance import stamp_provenance
 
         install()
+        before_task_publish.connect(stamp_provenance, dispatch_uid="squadron-activity-provenance")
