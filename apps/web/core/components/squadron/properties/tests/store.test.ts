@@ -83,7 +83,7 @@ describe("PropertiesStore definitions", () => {
     const update = vi.fn().mockResolvedValue({ ...a, sort_order: 3 });
     const store = new PropertiesStore(api({ list: vi.fn().mockResolvedValue([a, b]), update }));
     await store.fetchDefinitions(pref);
-    await store.reorder(pref, a.id, 3);
+    await store.reorder(pref, [{ id: a.id, sort_order: 3 }]);
     expect(update).toHaveBeenCalledWith("acme", "p1", a.id, { sort_order: 3 });
     expect(store.definitions("p1")?.map((p) => p.id)).toEqual([b.id, a.id]);
   });

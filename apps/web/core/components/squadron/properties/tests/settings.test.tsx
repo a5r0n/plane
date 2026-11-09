@@ -73,14 +73,23 @@ describe("midpoint", () => {
 describe("dropOrder", () => {
   const defs = [prop({ sort_order: 1000 }), prop({ sort_order: 2000 }), prop({ sort_order: 3000 })];
 
-  it("lands between the target and its neighbour on the dropped edge", () => {
-    expect(dropOrder(defs, defs[2].id, defs[1].id, "top")).toBe(1500);
-    expect(dropOrder(defs, defs[0].id, defs[1].id, "bottom")).toBe(2500);
-    expect(dropOrder(defs, defs[0].id, defs[2].id, "bottom")).toBe(4000);
+  it("moves only the dropped property, between the target and its neighbour", () => {
+    expect(dropOrder(defs, defs[2].id, defs[1].id, "top")).toEqual([{ id: defs[2].id, sort_order: 1500 }]);
+    expect(dropOrder(defs, defs[0].id, defs[1].id, "bottom")).toEqual([{ id: defs[0].id, sort_order: 2500 }]);
+    expect(dropOrder(defs, defs[0].id, defs[2].id, "bottom")).toEqual([{ id: defs[0].id, sort_order: 4000 }]);
   });
 
-  it("is null when the drop doesn't move it", () => {
-    expect(dropOrder(defs, defs[1].id, defs[1].id, "top")).toBeNull();
-    expect(dropOrder(defs, defs[0].id, defs[1].id, "top")).toBeNull();
+  it("is empty when the drop doesn't move it", () => {
+    expect(dropOrder(defs, defs[1].id, defs[1].id, "top")).toEqual([]);
+    expect(dropOrder(defs, defs[0].id, defs[1].id, "top")).toEqual([]);
+  });
+
+  it("renumbers the list when the neighbours share a sort order", () => {
+    const same = [prop({ sort_order: 65535 }), prop({ sort_order: 65535 }), prop({ sort_order: 65535 })];
+    expect(dropOrder(same, same[0].id, same[2].id, "top")).toEqual([
+      { id: same[1].id, sort_order: 1000 },
+      { id: same[0].id, sort_order: 2000 },
+      { id: same[2].id, sort_order: 3000 },
+    ]);
   });
 });

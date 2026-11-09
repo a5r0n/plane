@@ -96,18 +96,24 @@ export const midpoint = (prev?: number, next?: number): number => {
   return (prev + next) / 2;
 };
 
-/** The sort_order for dropping `sourceId` on an edge of `targetId`; null when it doesn't move. */
-export const dropOrder = (
-  defs: TProperty[],
-  sourceId: string,
-  targetId: string,
-  edge: "top" | "bottom"
-): number | null => {
+export type TMove = { id: string; sort_order: number };
+
+/** The sort_order changes for dropping `sourceId` on an edge of `targetId`; renumbers when neighbours tie. */
+export const dropOrder = (defs: TProperty[], sourceId: string, targetId: string, edge: "top" | "bottom"): TMove[] => {
   const from = defs.findIndex((def) => def.id === sourceId);
   const rest = defs.filter((def) => def.id !== sourceId);
   const target = rest.findIndex((def) => def.id === targetId);
-  if (from < 0 || target < 0) return null;
+  if (from < 0 || target < 0) return [];
   const at = edge === "top" ? target : target + 1;
-  if (at === from) return null;
-  return midpoint(rest[at - 1]?.sort_order, rest[at]?.sort_order);
+  if (at === from) return [];
+  const prev = rest[at - 1]?.sort_order;
+  const next = rest[at]?.sort_order;
+  if (prev === undefined || next === undefined || next - prev > 1e-6) {
+    return [{ id: sourceId, sort_order: midpoint(prev, next) }];
+  }
+  const order = [...rest.slice(0, at), defs[from], ...rest.slice(at)];
+  return order
+    .map((def, i) => ({ id: def.id, sort_order: (i + 1) * 1000, was: def.sort_order }))
+    .filter((move) => move.sort_order !== move.was)
+    .map(({ id, sort_order }) => ({ id, sort_order }));
 };

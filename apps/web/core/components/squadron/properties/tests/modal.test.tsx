@@ -94,6 +94,16 @@ describe("PropertyModal", () => {
     expect(options[2]).toEqual({ label: "plane", disabled: false });
   });
 
+  it("places a new property after the last one", async () => {
+    const create = vi.fn().mockImplementation((_s, _p, data) => Promise.resolve(prop(data)));
+    setup([prop({ sort_order: 65535 })], { create });
+    render(<PropertyModal isOpen onClose={vi.fn()} {...ref} />);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Repo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(create).toHaveBeenCalled());
+    expect(create.mock.calls[0][2].sort_order).toBe(66535);
+  });
+
   it("keeps the modal open with the server's reason on 400", async () => {
     const create = vi.fn().mockRejectedValue({ key: ["key 'repo' is already used in this project"] });
     setup([], { create });

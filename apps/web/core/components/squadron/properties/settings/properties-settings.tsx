@@ -37,10 +37,10 @@ export const PropertiesSettings = observer(function PropertiesSettings({ workspa
 
   const onDrop = useCallback(
     (sourceId: string, targetId: string, edge: "top" | "bottom") => {
-      const order = dropOrder(store.definitions(projectId) ?? [], sourceId, targetId, edge);
-      if (order === null) return;
+      const moves = dropOrder(store.definitions(projectId) ?? [], sourceId, targetId, edge);
+      if (moves.length === 0) return;
       store
-        .reorder({ slug: workspaceSlug, projectId }, sourceId, order)
+        .reorder({ slug: workspaceSlug, projectId }, moves)
         .catch((error: unknown) =>
           setToast({ type: TOAST_TYPE.ERROR, title: "Couldn't move the property", message: errorText(error) })
         );

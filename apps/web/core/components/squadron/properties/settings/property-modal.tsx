@@ -10,7 +10,7 @@ import { isEqual } from "lodash-es";
 import { observer } from "mobx-react";
 import { Button } from "@plane/propel/button";
 import { CustomSelect, EModalPosition, EModalWidth, Input, ModalCore, TextArea, ToggleSwitch } from "@plane/ui";
-import { errorText, slugKey } from "../helpers";
+import { errorText, midpoint, slugKey } from "../helpers";
 import { PROPERTY_ICONS } from "../icons";
 import type { TOption, TProperty, TPropertyInput, TPropertyType, TWriteRole } from "../types";
 import { useProperties } from "../use-properties";
@@ -134,7 +134,10 @@ export const PropertyModal = observer(function PropertyModal(props: Props) {
     try {
       const ref = { slug: workspaceSlug, projectId };
       if (property) await store.updateDefinition(ref, property.id, data);
-      else await store.createDefinition(ref, data);
+      else {
+        const last = store.definitions(projectId)?.at(-1);
+        await store.createDefinition(ref, { ...data, sort_order: midpoint(last?.sort_order, undefined) });
+      }
       onClose();
     } catch (err) {
       const options = !!err && typeof err === "object" && "options" in err;

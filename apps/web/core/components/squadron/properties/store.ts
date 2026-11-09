@@ -8,6 +8,7 @@ import { sortBy } from "lodash-es";
 import { action, makeObservable, observable, runInAction } from "mobx";
 // local imports
 import { sameValue } from "./helpers";
+import type { TMove } from "./helpers";
 import type { TPropertiesApi } from "./service";
 import type { TItemFields, TProperty, TPropertyInput, TValue } from "./types";
 
@@ -114,6 +115,6 @@ export class PropertiesStore {
     await this.optimisticDefs(projectId, next, () => this.api.remove(slug, projectId, id));
   };
 
-  reorder = (ref: TProjectRef, id: string, sortOrder: number) =>
-    this.updateDefinition(ref, id, { sort_order: sortOrder });
+  reorder = (ref: TProjectRef, moves: TMove[]) =>
+    Promise.all(moves.map((move) => this.updateDefinition(ref, move.id, { sort_order: move.sort_order })));
 }
