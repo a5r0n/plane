@@ -16,6 +16,7 @@ import { IssueLinksActionButton } from "./links";
 import { RelationActionButton } from "./relations";
 import { SubIssuesActionButton } from "./sub-issues";
 import { IssueDetailWidgetButton } from "./widget-button";
+import { useIsEpic } from "@/components/squadron/epics/use-is-epic"; // squadron
 
 type Props = {
   workspaceSlug: string;
@@ -30,6 +31,7 @@ export function IssueDetailWidgetActionButtons(props: Props) {
   const { workspaceSlug, projectId, issueId, disabled, issueServiceType, hideWidgets } = props;
   // translation
   const { t } = useTranslation();
+  const isEpic = useIsEpic(issueId); // squadron
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -38,7 +40,7 @@ export function IssueDetailWidgetActionButtons(props: Props) {
           issueId={issueId}
           customButton={
             <IssueDetailWidgetButton
-              title={t("issue.add.sub_issue")}
+              title={t(isEpic ? "issue.add.label" : "issue.add.sub_issue")} // squadron: an epic holds work items
               icon={<ViewsIcon className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />}
               disabled={disabled}
             />

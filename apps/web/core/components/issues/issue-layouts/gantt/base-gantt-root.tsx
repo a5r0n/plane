@@ -12,6 +12,7 @@ import { ALL_ISSUES, EUserPermissions, EUserPermissionsLevel } from "@plane/cons
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { EIssuesStoreType, IBlockUpdateData, TIssue } from "@plane/types";
+import { EIssuesStoreType as StoreTypes } from "@plane/types"; // squadron
 import { EIssueLayoutTypes, GANTT_TIMELINE_TYPE } from "@plane/types";
 import { renderFormattedPayloadDate } from "@plane/utils";
 // components
@@ -50,6 +51,7 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
   const { workspaceSlug, projectId } = useParams();
 
   const storeType = useIssueStoreType() as GanttStoreType;
+  const epicLabels = isEpic || storeType === StoreTypes.EPIC; // squadron: epics page labels
   const { issues, issuesFilter } = useIssues(storeType);
   const { fetchIssues, fetchNextIssues, updateIssue, quickAddIssue } = useIssuesActions(storeType);
   const { initGantt } = useTimeLineChart(GANTT_TIMELINE_TYPE.ISSUE);
@@ -129,8 +131,8 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
         <div className="h-full w-full">
           <GanttChartRoot
             border={false}
-            title={isEpic ? t("epic.label", { count: 2 }) : t("issue.label", { count: 2 })}
-            loaderTitle={isEpic ? t("epic.label", { count: 2 }) : t("issue.label", { count: 2 })}
+            title={epicLabels ? t("epic.label", { count: 2 }) : t("issue.label", { count: 2 })}
+            loaderTitle={epicLabels ? t("epic.label", { count: 2 }) : t("issue.label", { count: 2 })}
             blockIds={issuesIds}
             blockUpdateHandler={updateIssueBlockStructure}
             blockToRender={(data: TIssue) => <IssueGanttBlock issueId={data.id} isEpic={isEpic} />}

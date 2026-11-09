@@ -42,6 +42,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 import { HIGHLIGHT_CLASS, highlightIssueOnDrop } from "../../issues/issue-layouts/utils";
 import { ProjectNavigation } from "./project-navigation";
 import { useNavigationItems } from "@/components/navigation/use-navigation-items";
+import { isBrowsingProject } from "@/components/squadron/sidebar/browse"; // squadron
 
 type Props = {
   projectId: string;
@@ -90,7 +91,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   const projectRef = useRef<HTMLDivElement | null>(null);
   const dragHandleRef = useRef<HTMLButtonElement | null>(null);
   // router
-  const { workspaceSlug, projectId: URLProjectId } = useParams();
+  const { workspaceSlug, projectId: URLProjectId, workItem: browseKey } = useParams(); // squadron: browseKey
   const router = useRouter();
   // derived values
   const project = getPartialProjectById(projectId);
@@ -236,7 +237,8 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    if (URLProjectId === project?.id) {
+    const onBrowse = isBrowsingProject(browseKey, project?.identifier); // squadron: open on /browse
+    if (URLProjectId === project?.id || onBrowse) {
       setIsProjectListOpen(true);
       // Scroll to active project
       if (projectRef.current) {
@@ -257,7 +259,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
         clearTimeout(timeoutId);
       }
     };
-  }, [URLProjectId, project?.id, setIsProjectListOpen]);
+  }, [URLProjectId, project?.id, setIsProjectListOpen, browseKey, project?.identifier]); // squadron: browseKey
 
   if (!project) return null;
 

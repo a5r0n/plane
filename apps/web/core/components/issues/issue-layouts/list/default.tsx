@@ -26,6 +26,7 @@ import type {
 import { MultipleSelectGroup } from "@/components/core/multiple-select";
 // hooks
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { EIssuesStoreType } from "@plane/types"; // squadron
 // plane web components
 import { IssueBulkOperationsRoot } from "@/components/issues/bulk-operations";
 // plane web hooks
@@ -91,7 +92,7 @@ export const List = observer(function List(props: IList) {
     groupBy: group_by as GroupByColumnTypes,
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
-    isEpic: isEpic,
+    isEpic: isEpic || storeType === EIssuesStoreType.EPIC, // squadron: epics page labels
   });
 
   // Enable Auto Scroll for Main Kanban

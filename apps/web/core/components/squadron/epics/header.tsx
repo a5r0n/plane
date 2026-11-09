@@ -10,7 +10,7 @@ import { useParams } from "next/navigation";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { WorkItemsIcon } from "@plane/propel/icons";
+import { EpicIcon } from "@plane/propel/icons";
 import { EIssuesStoreType } from "@plane/types";
 import { Breadcrumbs, Header } from "@plane/ui";
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
@@ -38,7 +38,7 @@ export const EpicsHeader = observer(function EpicsHeader() {
               <BreadcrumbLink
                 label={t("sidebar.epics")}
                 href={`/${workspaceSlug}/projects/${projectId}/epics/`}
-                icon={<WorkItemsIcon className="h-4 w-4 text-tertiary" />}
+                icon={<EpicIcon className="h-4 w-4 text-tertiary" />}
                 isLast
               />
             }

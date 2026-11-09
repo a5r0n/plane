@@ -19,6 +19,8 @@ import { cn, createIssuePayload } from "@plane/utils";
 // local imports
 import { QuickAddIssueFormRoot } from "./form";
 import { CreateIssueToastActionItems } from "../../create-issue-toast-action-items";
+import { EIssuesStoreType } from "@plane/types"; // squadron
+import { useIssueStoreType } from "@/hooks/use-issue-layout-store"; // squadron
 
 export type TQuickAddIssueForm = {
   ref: React.RefObject<HTMLFormElement>;
@@ -61,8 +63,10 @@ export const QuickAddIssueRoot = observer(function QuickAddIssueRoot(props: TQui
     containerClassName = "",
     setIsQuickAddOpen,
     quickAddCallback,
-    isEpic = false,
+    isEpic: isEpicProp = false,
   } = props;
+  const storeType = useIssueStoreType(); // squadron
+  const isEpic = isEpicProp || storeType === EIssuesStoreType.EPIC; // squadron: epics page labels
   // i18n
   const { t } = useTranslation();
   // router

@@ -158,6 +158,11 @@ issues, search) drop epics, and the named count routes (analytics, cycle and mod
 progress, project and user stats, the v1 project summary) leave them out of every number.
 `entity-search/` keeps showing them, for mentions. Session list responses carry `type_id`.
 
+An epic spans cycles, so it can't be put in a cycle or module. The routes `REFUSE` in `routes.py`
+names (session and v1 cycle issues, module issues, and an item's module list) answer 400
+`{"error": "An epic can't be added to a cycle.", "ids": [...]}` (or `module`) when a POST would add
+an epic, before writing anything (`plane/ext/epics/refuse.py`). Taking an epic out still works.
+
 How the hiding works, for anyone merging upstream:
 
 - the `issue_objects` manager filters by a request scope (`exclude`, `only`, `all`); outside a
@@ -172,7 +177,11 @@ How the hiding works, for anyone merging upstream:
 Web: an Epics entry in the project sidebar opens `projects/<id>/epics`, which renders upstream's
 five layouts against the `projectEpics` store (`apps/web/core/components/squadron/epics/`). "Add
 epic" and the empty state open a name-only create form. An epic opens on the normal
-`/browse/KEY-N` page, which picks the epic view from `is_epic`.
+`/browse/KEY-N` page, which picks the epic view from `is_epic`. Layout labels on the epics page
+read "epic" from the store type (`EPIC`) rather than upstream's `isEpic` prop, which would also move
+peek to an epic view CE doesn't have. An epic's detail shows an "Epic" mark, a Project › Epics
+breadcrumb, "Work items" for its children, and no Cycle or Module; a child shows `EpicIcon` before
+its parent's identifier. On `/browse/KEY-N` the item's project stays open in the sidebar.
 
 Notifications, exports and webhooks treat an epic as a work item: subscribers are notified, exports
 include it as a row, and `issue` webhooks fire with `type` set to the epic type's id.
@@ -186,7 +195,6 @@ Known limits:
 - exports have no type column, so an epic can't be told from a work item there.
 - the epics page shares its layout and display filters with the work items page, so changing one
   changes the other;
-- on the epics page, breadcrumbs say "Work Items" and quick-add rows say "work item";
 - "Add existing" on an epic offers other epics, so epics can nest.
 
 ## Images
@@ -237,6 +245,7 @@ API token, project), then checks cross-service flows:
   (same URL, token and cookie as the web editor).
 - `tests/mcp.test.ts`: a smoke run of `plane-mcp-server`, pinned by SHA in `src/mcp.ts`, over
   stdio.
+- `tests/epics.test.ts`: the v1 API refusing an epic in a cycle or module.
 
 Add a flow as a new `tests/<area>.test.ts`; `inject("stack")` gives it the user, workspace,
 project and API key. To run it locally (needs Node, pnpm and `uv`):

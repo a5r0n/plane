@@ -22,6 +22,8 @@ import { ExistingIssuesListModal } from "@/components/core/modals/existing-issue
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { QuickAddIssueRoot } from "../quick-add";
+import { EIssuesStoreType } from "@plane/types"; // squadron
+import { useIssueStoreType } from "@/hooks/use-issue-layout-store"; // squadron
 
 type TCalendarQuickAddIssueActions = {
   prePopulatedData?: Partial<TIssue>;
@@ -35,6 +37,8 @@ export const CalendarQuickAddIssueActions = observer(function CalendarQuickAddIs
   props: TCalendarQuickAddIssueActions
 ) {
   const { prePopulatedData, quickAddCallback, addIssuesToView, onOpen, isEpic = false } = props;
+  const storeType = useIssueStoreType(); // squadron
+  const epicLabels = isEpic || storeType === EIssuesStoreType.EPIC; // squadron: epics page labels
   const { t } = useTranslation();
   // router
   const { workspaceSlug, projectId, moduleId } = useParams();
@@ -127,13 +131,13 @@ export const CalendarQuickAddIssueActions = observer(function CalendarQuickAddIs
                 <div className="flex w-full items-center gap-x-[6px] rounded-md px-2 py-1.5 text-tertiary hover:text-tertiary">
                   <PlusIcon className="h-3.5 w-3.5 flex-shrink-0 stroke-2" />
                   <span className="flex-shrink-0 text-13 font-medium">
-                    {isEpic ? t("epic.add.label") : t("issue.add.label")}
+                    {epicLabels ? t("epic.add.label") : t("issue.add.label")}
                   </span>
                 </div>
               }
             >
               <CustomMenu.MenuItem onClick={handleNewIssue}>
-                {isEpic ? t("epic.add.label") : t("issue.add.label")}
+                {epicLabels ? t("epic.add.label") : t("issue.add.label")}
               </CustomMenu.MenuItem>
               {!isEpic && (
                 <CustomMenu.MenuItem onClick={handleExistingIssue}>{t("issue.add.existing")}</CustomMenu.MenuItem>

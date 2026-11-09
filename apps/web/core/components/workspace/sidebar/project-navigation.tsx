@@ -11,6 +11,7 @@ import { useParams, usePathname } from "next/navigation";
 import { EUserPermissionsLevel, EUserPermissions } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
+import { EpicIcon } from "@plane/propel/icons"; // squadron
 import type { EUserProjectRoles } from "@plane/types";
 // plane ui
 // components
@@ -86,7 +87,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         key: "epics",
         name: "Epics",
         href: `/${workspaceSlug}/projects/${projectId}/epics`,
-        icon: WorkItemsIcon,
+        icon: EpicIcon,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: true,
         sortOrder: 1.5,

@@ -203,7 +203,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           </SidebarPropertyListItem>
         )}
 
-        {projectDetails?.module_view && (
+        {projectDetails?.module_view && !issue.is_epic /* squadron: no epics in modules */ && (
           <SidebarPropertyListItem icon={ModuleIcon} label={t("common.modules")}>
             <IssueModuleSelect
               className="w-full grow"
@@ -216,7 +216,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           </SidebarPropertyListItem>
         )}
 
-        {projectDetails?.cycle_view && (
+        {projectDetails?.cycle_view && !issue.is_epic /* squadron: no epics in cycles */ && (
           <SidebarPropertyListItem icon={CycleIcon} label={t("common.cycle")} appendElement={null}>
             <IssueCycleSelect
               className="h-7.5 w-full grow"

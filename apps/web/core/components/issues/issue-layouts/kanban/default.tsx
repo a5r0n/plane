@@ -26,6 +26,7 @@ import { KanbanColumnLoader } from "@/components/ui/loader/layouts/kanban-layout
 // hooks
 import { useKanbanView } from "@/hooks/store/use-kanban-view";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { EIssuesStoreType } from "@plane/types"; // squadron
 // types
 // parent components
 import { useWorkFlowFDragNDrop } from "@/components/workflow";
@@ -110,7 +111,7 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
     groupBy: group_by as GroupByColumnTypes,
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
-    isEpic: isEpic,
+    isEpic: isEpic || storeType === EIssuesStoreType.EPIC, // squadron: epics page labels
   });
 
   if (!list) return null;
