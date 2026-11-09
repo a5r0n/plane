@@ -5,7 +5,7 @@
  */
 
 import type { LucideIcon } from "lucide-react";
-import { SlidersHorizontal, Users, Zap } from "lucide-react";
+import { SlidersHorizontal, Users, Zap } from "lucide-react"; // squadron
 // plane imports
 import type { ISvgIcons } from "@plane/propel/icons";
 import {
