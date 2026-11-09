@@ -31,6 +31,7 @@ import {
   IssueArchivedAtActivity,
   IssueInboxActivity,
 } from "./actions";
+import { IssuePropertyActivity } from "@/components/squadron/properties/activity-property"; // squadron
 import { IssueStepActivity } from "@/components/squadron/steps/activity-step"; // squadron
 
 type TIssueActivityItem = {
@@ -87,6 +88,8 @@ export const IssueActivityItem = observer(function IssueActivityItem(props: TIss
       return <IssueLinkActivity {...componentDefaultProps} showIssue={false} />;
     case "step": // squadron
       return <IssueStepActivity {...componentDefaultProps} />;
+    case "custom_fields": // squadron
+      return <IssuePropertyActivity {...componentDefaultProps} />;
     case "attachment":
       return <IssueAttachmentActivity {...componentDefaultProps} showIssue={false} />;
     case "archived_at":
