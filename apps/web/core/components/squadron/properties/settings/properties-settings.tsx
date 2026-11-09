@@ -12,17 +12,19 @@ import { SettingsHeading } from "@/components/settings/heading";
 import { dropOrder, errorText } from "../helpers";
 import type { TProperty } from "../types";
 import { useProperties } from "../use-properties";
+import { DeletePropertyModal } from "./delete-property-modal";
+import { PropertyModal } from "./property-modal";
 import { PropertyRow } from "./property-row";
 
 type Props = { workspaceSlug: string; projectId: string };
 
-// "new" opens the create modal; a property opens edit or delete.
-export type TModal = { kind: "edit"; prop: TProperty | null } | { kind: "delete"; prop: TProperty } | null;
+// edit with no prop creates; delete always names one.
+type TModal = { kind: "edit"; prop: TProperty | null } | { kind: "delete"; prop: TProperty } | null;
 
 /** Project settings → Properties: the project's definitions, in order. */
 export const PropertiesSettings = observer(function PropertiesSettings({ workspaceSlug, projectId }: Props) {
   const store = useProperties();
-  const [, setModal] = useState<TModal>(null);
+  const [modal, setModal] = useState<TModal>(null);
   const defs = store.definitions(projectId);
 
   useEffect(() => {
@@ -48,8 +50,26 @@ export const PropertiesSettings = observer(function PropertiesSettings({ workspa
 
   const add = () => setModal({ kind: "edit", prop: null });
 
+  const close = () => setModal(null);
+
   return (
     <>
+      <PropertyModal
+        isOpen={modal?.kind === "edit"}
+        onClose={close}
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        property={modal?.kind === "edit" ? (modal.prop ?? undefined) : undefined}
+      />
+      {modal?.kind === "delete" && (
+        <DeletePropertyModal
+          isOpen
+          onClose={close}
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          property={modal.prop}
+        />
+      )}
       <SettingsHeading
         title="Properties"
         description="Your own fields on this project's work items."

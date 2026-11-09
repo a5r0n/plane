@@ -4,13 +4,22 @@
  * See the LICENSE file for details.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { dropOrder, midpoint } from "../helpers";
 import type { TPropertiesApi } from "../service";
 import { PropertiesStore } from "../store";
 import type { TProperty } from "../types";
 import { choice, prop } from "./fixtures";
+
+vi.stubGlobal(
+  "ResizeObserver",
+  class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+);
 
 const holder = vi.hoisted(() => ({ store: undefined as unknown }));
 vi.mock("../use-properties", () => ({ useProperties: () => holder.store }));
@@ -42,6 +51,13 @@ describe("PropertiesSettings", () => {
   it("shows the empty state", async () => {
     await show([]);
     expect(await screen.findByText("No properties yet. Add one to track your own fields on work items.")).toBeTruthy();
+  });
+
+  it("opens the create modal from Add property", async () => {
+    await show([]);
+    expect(screen.queryByLabelText("Key")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Add property" })[0]);
+    expect(await screen.findByLabelText("Key")).toBeTruthy();
   });
 });
 
