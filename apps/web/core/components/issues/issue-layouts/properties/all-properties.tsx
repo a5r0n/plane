@@ -344,7 +344,8 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
       </WithDisplayPropertiesHOC>
 
       <>
-        {!isEpic && (
+        {/* squadron: an epic row has no cycle or module */}
+        {!isEpic && !issue?.is_epic && (
           <>
             {/* modules */}
             {projectDetails?.module_view && (

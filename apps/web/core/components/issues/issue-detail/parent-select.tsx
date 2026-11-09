@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 
 import { useTranslation } from "@plane/i18n";
-import { EditIcon, CloseIcon } from "@plane/propel/icons";
+import { EditIcon, CloseIcon, EpicIcon } from "@plane/propel/icons"; // squadron: EpicIcon
 // plane imports
 import { Tooltip } from "@plane/propel/tooltip";
 import { cn } from "@plane/utils";
@@ -91,6 +91,8 @@ export const IssueParentSelect = observer(function IssueParentSelect(props: TIss
       >
         {issue.parent_id && parentIssue ? (
           <div className="flex items-center gap-1.5">
+            {/* squadron: parent is an epic */}
+            {parentIssue.is_epic && <EpicIcon className="size-3.5 flex-shrink-0" />}
             <Tooltip tooltipHeading="Title" tooltipContent={parentIssue.name} isMobile={isMobile}>
               <Link href={workItemLink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
                 {parentIssue?.project_id && parentIssueProjectDetails && (

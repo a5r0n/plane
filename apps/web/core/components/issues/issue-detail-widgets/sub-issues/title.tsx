@@ -13,6 +13,7 @@ import { CircularProgressIndicator, CollapsibleButton } from "@plane/ui";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { SubWorkItemTitleActions } from "./title-actions";
+import { useIsEpic } from "@/components/squadron/epics/use-is-epic"; // squadron
 
 type Props = {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export const SubIssuesCollapsibleTitle = observer(function SubIssuesCollapsibleT
   // derived values
   const subIssuesDistribution = stateDistributionByIssueId(parentIssueId);
   const subIssues = subIssuesByIssueId(parentIssueId);
+  const isEpic = useIsEpic(parentIssueId); // squadron
   // if there are no sub-issues, return null
   if (!subIssues) return null;
 
@@ -45,7 +47,11 @@ export const SubIssuesCollapsibleTitle = observer(function SubIssuesCollapsibleT
   return (
     <CollapsibleButton
       isOpen={isOpen}
-      title={`${issueServiceType === EIssueServiceType.EPICS ? t("issue.label", { count: 1 }) : t("common.sub_work_items")}`}
+      title={
+        isEpic
+          ? t("issue.label", { count: 2 }) /* squadron: an epic holds work items */
+          : `${issueServiceType === EIssueServiceType.EPICS ? t("issue.label", { count: 1 }) : t("common.sub_work_items")}`
+      }
       indicatorElement={
         <div className="flex items-center gap-1.5 text-13 text-tertiary">
           <CircularProgressIndicator size={18} percentage={percentage} strokeWidth={3} />

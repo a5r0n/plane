@@ -11,6 +11,7 @@ import { useTranslation } from "@plane/i18n";
 import type { TIssue } from "@plane/types";
 // component
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
+import { EpicIcon } from "@plane/propel/icons"; // squadron
 // ui
 import { ControlLink, CustomMenu } from "@plane/ui";
 // helpers
@@ -78,6 +79,8 @@ export const IssueParentDetail = observer(function IssueParentDetail(props: TIss
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2.5">
               <span className="block h-2 w-2 rounded-full" style={{ backgroundColor: stateColor }} />
+              {/* squadron: parent is an epic */}
+              {isParentEpic && <EpicIcon className="size-3.5 flex-shrink-0" />}
               {parentIssue.project_id && (
                 <IssueIdentifier
                   projectId={parentIssue.project_id}

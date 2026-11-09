@@ -22,6 +22,7 @@ import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 import { CreateUpdateEpicModal } from "@/components/epic-modal";
 // constants
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { EIssuesStoreType } from "@plane/types"; // squadron
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 
 interface IHeaderGroupByCard {
@@ -156,7 +157,7 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
             </div>
           ))}
 
-        {isEpic ? (
+        {isEpic || storeType === EIssuesStoreType.EPIC /* squadron: epic modal */ ? (
           <CreateUpdateEpicModal isOpen={isOpen} onClose={() => setIsOpen(false)} data={issuePayload} />
         ) : (
           <CreateUpdateIssueModal

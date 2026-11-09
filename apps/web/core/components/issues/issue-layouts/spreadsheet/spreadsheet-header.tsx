@@ -16,6 +16,8 @@ import { MultipleSelectGroupAction } from "@/components/core/multiple-select";
 // hooks
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { SpreadsheetHeaderColumn } from "./spreadsheet-header-column";
+import { EIssuesStoreType } from "@plane/types"; // squadron
+import { useIssueStoreType } from "@/hooks/use-issue-layout-store"; // squadron
 
 interface Props {
   displayProperties: IIssueDisplayProperties;
@@ -37,8 +39,10 @@ export const SpreadsheetHeader = observer(function SpreadsheetHeader(props: Prop
     isEstimateEnabled,
     spreadsheetColumnsList,
     selectionHelpers,
-    isEpic = false,
+    isEpic: isEpicProp = false,
   } = props;
+  const storeType = useIssueStoreType(); // squadron
+  const isEpic = isEpicProp || storeType === EIssuesStoreType.EPIC; // squadron: epics page labels
   // router
   const { projectId } = useParams();
   // derived values
