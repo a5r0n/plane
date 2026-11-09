@@ -12,6 +12,8 @@ import { IssueActivityBlockComponent } from "@/components/issues/issue-detail/is
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // local imports
 import { describePropertyActivity } from "./activity";
+import { formatValue } from "./helpers";
+import { useProperties } from "./use-properties";
 
 type Props = { activityId: string; ends: "top" | "bottom" | undefined };
 
@@ -20,9 +22,16 @@ export const IssuePropertyActivity = observer(function IssuePropertyActivity({ a
   const {
     activity: { getActivityById },
   } = useIssueDetail();
+  const properties = useProperties();
   const activity = getActivityById(activityId);
   if (!activity) return null;
-  const { verb, name, from, to } = describePropertyActivity(activity);
+  const prop = properties.definitions(activity.project)?.find((def) => def.id === activity.new_identifier);
+  // datetimes come as ISO text; anything else, or an unloaded definition, shows as stored
+  const show = (text?: string) =>
+    prop?.type === "datetime" && text && !Number.isNaN(Date.parse(text)) ? (formatValue(prop, text) ?? text) : text;
+  const { verb, name, from: rawFrom, to: rawTo } = describePropertyActivity(activity);
+  const from = show(rawFrom);
+  const to = show(rawTo);
   const bold = <span className="font-medium text-primary">{name}</span>;
   return (
     <IssueActivityBlockComponent
