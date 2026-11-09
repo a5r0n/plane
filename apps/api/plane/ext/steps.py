@@ -12,19 +12,18 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers, status
-from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from plane.api.views.base import BaseAPIView
 from plane.api.views.issue import IssueDetailAPIEndpoint, WorkspaceIssueAPIEndpoint
 from plane.app.permissions import ProjectEntityPermission
-from plane.authentication.session import BaseSessionAuthentication
 from plane.bgtasks.webhook_task import webhook_activity
 from plane.db.models import Issue, IssueActivity, WorkspaceMember
 from plane.ext.epics.routes import CYCLE, MODULE, P, W
 from plane.ext.models import WorkItemStep
 from plane.ext.properties import CustomFieldsMixin
 from plane.ext.rows import issue_rows
+from plane.ext.session import Session
 from plane.utils.host import base_host
 
 STEP_FIELDS = ("steps", "current_step")
@@ -408,15 +407,6 @@ class StepFieldsMixin:
             if "id" not in rest and rest:
                 response.data.pop("id", None)
         return response
-
-
-class Session:
-    """The web app's twin of a v1 step view: session auth and the app's default throttles."""
-
-    authentication_classes = [BaseSessionAuthentication]
-
-    def get_throttles(self):
-        return APIView.get_throttles(self)
 
 
 class SessionStepListCreateEndpoint(Session, StepListCreateEndpoint):

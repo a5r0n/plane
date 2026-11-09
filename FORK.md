@@ -195,6 +195,25 @@ numbers and `TRUE`/`FALSE`; choice takes option ids (disabled ones too), member 
 `currentUser()`, date takes `today()` and `daysAgo(n)` too. On a multiple property `=` means
 "holds". `!=` and `NOT IN` include items with no value. An unknown or deleted key answers 400.
 
+The web app uses session twins under `/api/workspaces/<slug>/projects/<id>/`: `properties/` and
+`properties/<property id>/` (same views and rules), and `issues/<item id>/custom-fields/`: GET
+`{values, can_write}` (`can_write` says per key whether the viewer may write it), PATCH
+`{key: value}` with the v1 all-or-nothing rules, activity and webhook.
+
+Web (`apps/web/core/components/squadron/properties/`):
+
+- Item page and peek: one row per visible property in the Properties list, after Labels, edited in
+  place (text, number and url inline; toggle; date picker; choice and member dropdowns, chips when
+  `multiple`). A key the viewer can't write shows read-only with a lock. Saves are optimistic and roll
+  back with the server's reason in a toast.
+- Project settings → Properties (Work structure, after Labels; admins only): list with drag to
+  reorder, create/edit modal (key and type fixed after create; options rename, disable, remove),
+  delete confirm.
+- Activity: `field` `custom_fields` rows read as "set X to …", "changed X from … to …", "cleared X".
+- Hooks: `issue-detail/sidebar.tsx`, `peek-overview/properties.tsx`, `activity-list.tsx`, the
+  settings nav (`packages/types` and `packages/constants` settings, `item-icon.tsx`) and
+  `routes/extended.ts`.
+
 ## Activity API
 
 `plane/ext/activity.py` shadows upstream's v1 `activities/` and `activities/<id>/` under both

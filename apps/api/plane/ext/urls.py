@@ -7,7 +7,13 @@ from django.urls import path
 from plane.ext.activity import ActivityDetailAPIEndpoint, ActivityListAPIEndpoint
 from plane.ext.epics.urls import epic_patterns
 from plane.ext.pages import ProjectPageAPIEndpoint
-from plane.ext.properties import PropertyDetailEndpoint, PropertyListCreateEndpoint
+from plane.ext.properties import (
+    ItemCustomFieldsEndpoint,
+    PropertyDetailEndpoint,
+    PropertyListCreateEndpoint,
+    SessionPropertyDetailEndpoint,
+    SessionPropertyListCreateEndpoint,
+)
 from plane.ext.relations import WorkItemRelationRemoveEndpoint
 from plane.ext.search import WorkItemSearchEndpoint
 from plane.ext.steps import (
@@ -25,6 +31,7 @@ from plane.ext.steps import (
 from plane.ext.work_items import WorkItemListCreateAPIEndpoint
 
 PROJECT = "v1/workspaces/<str:slug>/projects/<uuid:project_id>/"
+SESSION_PROJECT = "workspaces/<str:slug>/projects/<uuid:project_id>/"
 PAGES = PROJECT + "pages/"
 ITEMS = ("work-items", "issues")
 
@@ -107,6 +114,22 @@ urlpatterns = [
         PROJECT + "properties/<uuid:property_id>/",
         PropertyDetailEndpoint.as_view(http_method_names=["get", "patch", "delete"]),
         name="squadron-property",
+    ),
+    # the web app's session twins
+    path(
+        SESSION_PROJECT + "properties/",
+        SessionPropertyListCreateEndpoint.as_view(http_method_names=["get", "post"]),
+        name="squadron-session-properties",
+    ),
+    path(
+        SESSION_PROJECT + "properties/<uuid:property_id>/",
+        SessionPropertyDetailEndpoint.as_view(http_method_names=["get", "patch", "delete"]),
+        name="squadron-session-property",
+    ),
+    path(
+        SESSION_PROJECT + "issues/<uuid:issue_id>/custom-fields/",
+        ItemCustomFieldsEndpoint.as_view(http_method_names=["get", "patch"]),
+        name="squadron-session-custom-fields",
     ),
 ]
 

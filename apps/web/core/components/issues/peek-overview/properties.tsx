@@ -40,6 +40,7 @@ import { IssueParentSelectRoot } from "@/components/issues/parent-select-root";
 import type { TIssueOperations } from "../issue-detail";
 import { IssueCycleSelect } from "../issue-detail/cycle-select";
 import { IssueLabel } from "../issue-detail/label";
+import { ItemCustomProperties } from "@/components/squadron/properties/item-properties"; // squadron
 import { IssueModuleSelect } from "../issue-detail/module-select";
 
 interface IPeekOverviewProperties {
@@ -243,6 +244,14 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
         <SidebarPropertyListItem icon={LabelPropertyIcon} label={t("common.labels")}>
           <IssueLabel workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={disabled} />
         </SidebarPropertyListItem>
+
+        {/* squadron: custom properties */}
+        <ItemCustomProperties
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          archived={!!issue.archived_at}
+        />
       </div>
     </div>
   );

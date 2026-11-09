@@ -5,7 +5,7 @@
  */
 
 import type { LucideIcon } from "lucide-react";
-import { Users, Zap } from "lucide-react";
+import { SlidersHorizontal, Users, Zap } from "lucide-react"; // squadron
 // plane imports
 import type { ISvgIcons } from "@plane/propel/icons";
 import {
@@ -32,6 +32,7 @@ export const PROJECT_SETTINGS_ICONS: Record<TProjectSettingsTabs, LucideIcon | R
   features_intake: IntakeIcon,
   states: StatePropertyIcon,
   labels: LabelPropertyIcon,
+  properties: SlidersHorizontal, // squadron
   estimates: EstimatePropertyIcon,
   automations: Zap,
 };
