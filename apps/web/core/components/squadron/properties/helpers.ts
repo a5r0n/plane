@@ -87,3 +87,27 @@ export const errorText = (error: unknown, key?: string): string => {
   if (typeof body.error === "string") return body.error;
   return firstString(error) ?? "Couldn't save the change";
 };
+
+/** A sort_order between two neighbours; 1000 past an end. */
+export const midpoint = (prev?: number, next?: number): number => {
+  if (prev === undefined && next === undefined) return 1000;
+  if (prev === undefined) return (next as number) - 1000;
+  if (next === undefined) return prev + 1000;
+  return (prev + next) / 2;
+};
+
+/** The sort_order for dropping `sourceId` on an edge of `targetId`; null when it doesn't move. */
+export const dropOrder = (
+  defs: TProperty[],
+  sourceId: string,
+  targetId: string,
+  edge: "top" | "bottom"
+): number | null => {
+  const from = defs.findIndex((def) => def.id === sourceId);
+  const rest = defs.filter((def) => def.id !== sourceId);
+  const target = rest.findIndex((def) => def.id === targetId);
+  if (from < 0 || target < 0) return null;
+  const at = edge === "top" ? target : target + 1;
+  if (at === from) return null;
+  return midpoint(rest[at - 1]?.sort_order, rest[at]?.sort_order);
+};

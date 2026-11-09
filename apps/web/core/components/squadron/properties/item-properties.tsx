@@ -5,38 +5,16 @@
  */
 
 import { useEffect } from "react";
-import {
-  Calendar,
-  CalendarClock,
-  Hash,
-  Info,
-  Link,
-  ListChecks,
-  Lock,
-  ToggleLeft,
-  Type,
-  User,
-  type LucideIcon,
-} from "lucide-react";
+import { Info, Lock } from "lucide-react";
 import { observer } from "mobx-react";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/property-list-item";
 import { errorText, lockText, visibleSorted } from "./helpers";
-import type { TProperty, TPropertyType, TValue } from "./types";
+import { PROPERTY_ICONS } from "./icons";
+import type { TProperty, TValue } from "./types";
 import { useProperties } from "./use-properties";
 import { PropertyValueEditor } from "./values/value-editor";
-
-export const PROPERTY_ICONS: Record<TPropertyType, LucideIcon> = {
-  text: Type,
-  number: Hash,
-  boolean: ToggleLeft,
-  date: Calendar,
-  datetime: CalendarClock,
-  choice: ListChecks,
-  member: User,
-  url: Link,
-};
 
 type Props = { workspaceSlug: string; projectId: string; issueId: string; disabled: boolean };
 

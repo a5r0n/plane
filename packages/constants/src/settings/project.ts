@@ -93,6 +93,14 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     access: [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/labels/`,
   },
+  // squadron: custom properties
+  properties: {
+    key: "properties",
+    i18n_label: "common.properties",
+    href: `/properties`,
+    access: [EUserProjectRoles.ADMIN],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/properties/`,
+  },
   estimates: {
     key: "estimates",
     i18n_label: "common.estimates",
@@ -123,6 +131,7 @@ export const GROUPED_PROJECT_SETTINGS: Record<PROJECT_SETTINGS_CATEGORY, TProjec
   [PROJECT_SETTINGS_CATEGORY.WORK_STRUCTURE]: [
     PROJECT_SETTINGS["states"],
     PROJECT_SETTINGS["labels"],
+    PROJECT_SETTINGS["properties"], // squadron
     PROJECT_SETTINGS["estimates"],
   ],
   [PROJECT_SETTINGS_CATEGORY.EXECUTION]: [PROJECT_SETTINGS["automations"]],

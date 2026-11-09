@@ -9,6 +9,7 @@ import type { RouteConfigEntry } from "@react-router/dev/routes";
 
 // squadron: epics. Layout chain must repeat core's file paths so mergeRoutes nests these inside them.
 const P = "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]";
+const S = "./(all)/[workspaceSlug]/(settings)/settings/projects";
 export const extendedRoutes: RouteConfigEntry[] = [
   layout("./(all)/layout.tsx", [
     layout("./(all)/[workspaceSlug]/layout.tsx", [
@@ -16,6 +17,14 @@ export const extendedRoutes: RouteConfigEntry[] = [
         layout(`${P}/layout.tsx`, [
           layout(`${P}/epics/(list)/layout.tsx`, [
             route(":workspaceSlug/projects/:projectId/epics", `${P}/epics/(list)/page.tsx`),
+          ]),
+        ]),
+      ]),
+      // squadron: custom properties settings
+      layout("./(all)/[workspaceSlug]/(settings)/layout.tsx", [
+        layout(`${S}/layout.tsx`, [
+          layout(`${S}/[projectId]/layout.tsx`, [
+            route(":workspaceSlug/settings/projects/:projectId/properties", `${S}/[projectId]/properties/page.tsx`),
           ]),
         ]),
       ]),
