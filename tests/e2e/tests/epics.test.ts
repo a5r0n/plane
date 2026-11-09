@@ -26,6 +26,7 @@ describe("epics stay out of cycles and modules on the v1 API", () => {
   let itemId: string;
 
   beforeAll(async () => {
+    await api.call("PATCH", project, { cycle_view: true, module_view: true });
     epicId = (await api.call<{ id: string }>("POST", `${project}epics/`, { name: "Refuse E2E epic" })).id;
     itemId = (await api.call<{ id: string }>("POST", `${project}work-items/`, { name: "Refuse E2E item" })).id;
   });
