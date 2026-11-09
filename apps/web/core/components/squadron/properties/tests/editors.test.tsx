@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TProperty, TValue } from "../types";
@@ -96,6 +96,39 @@ describe("ChoiceEditor", () => {
     const onChange = renderEditor(choice({ name: "Repo" }), "a");
     await userEvent.click(screen.getByRole("button", { name: "Clear Repo" }));
     expect(onChange).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("datetime time", () => {
+  const due = prop({ name: "Due", type: "datetime" });
+  const at = new Date(2026, 10, 9, 9, 0).toISOString();
+
+  it("saves the time once, on blur", () => {
+    const onChange = renderEditor(due, at);
+    const input = screen.getByLabelText("Due time");
+    fireEvent.change(input, { target: { value: "01:00" } });
+    fireEvent.change(input, { target: { value: "14:30" } });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(new Date(2026, 10, 9, 14, 30).toISOString());
+  });
+
+  it("saves on Enter", () => {
+    const onChange = renderEditor(due, at);
+    const input = screen.getByLabelText("Due time");
+    fireEvent.change(input, { target: { value: "10:15" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith(new Date(2026, 10, 9, 10, 15).toISOString());
+  });
+
+  it("ignores a half-cleared time", () => {
+    const onChange = renderEditor(due, at);
+    const input = screen.getByLabelText("Due time");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+    expect((input as HTMLInputElement).value).toBe("09:00");
   });
 });
 

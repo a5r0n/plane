@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { renderFormattedPayloadDate } from "@plane/utils";
@@ -27,6 +28,14 @@ export function DateEditor({ prop, value, onChange }: Props) {
   const text = typeof value === "string" ? value : null;
   const current = text ? (prop.type === "datetime" ? new Date(text) : parseDate(text)) : null;
   const time = current && prop.type === "datetime" ? format(current, "HH:mm") : "";
+  // a draft, so typing "1430" saves once on blur or Enter, not at every valid time on the way
+  const [draft, setDraft] = useState(time);
+  useEffect(() => setDraft(time), [time]);
+
+  const commitTime = () => {
+    if (!current || !draft) return setDraft(time);
+    if (draft !== time) onChange(combine(current, draft));
+  };
 
   const pickDate = (date: Date | null) => {
     if (!date) return onChange(null);
@@ -53,8 +62,10 @@ export function DateEditor({ prop, value, onChange }: Props) {
           type="time"
           aria-label={`${prop.name} time`}
           className="h-7.5 shrink-0 rounded-sm bg-transparent px-1 text-13 text-secondary outline-none hover:bg-layer-1"
-          value={time}
-          onChange={(e) => onChange(combine(current, e.target.value))}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitTime}
+          onKeyDown={(e) => e.key === "Enter" && commitTime()}
         />
       )}
     </div>
