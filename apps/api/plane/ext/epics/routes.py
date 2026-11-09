@@ -87,6 +87,14 @@ LISTS = {
     V1 + MODULE + "module-issues/",
     "public/anchor/<str:anchor>/issues/",
 }
+# POST routes that would put an epic in a cycle or module: full pattern -> which
+REFUSE = {
+    CYCLE + "cycle-issues/": "cycle",
+    MODULE + "issues/": "module",
+    ISSUE + "modules/": "module",
+    V1 + CYCLE + "cycle-issues/": "cycle",
+    V1 + MODULE + "module-issues/": "module",
+}
 # routes whose counts and analytics must not include epics
 TOTALS = {
     W + "analytics/",

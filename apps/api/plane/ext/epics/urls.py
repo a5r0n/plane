@@ -12,6 +12,7 @@ from django.urls.resolvers import RoutePattern
 
 from plane.db.models import Issue
 from plane.ext.epics import routes
+from plane.ext.epics.refuse import refusing
 from plane.ext.epics.scope import epic_scope
 from plane.ext.epics.views import (
     EpicChildrenAPIEndpoint,
@@ -150,7 +151,16 @@ def epic_patterns(own=()):
         for route in routes.MARKED
     ]
     patterns += [
-        path(route, hide_get(REPLACED.get(route, table[route].callback), route), name=f"hide-{table[route].name}")
+        path(route, hide_get(own_view(table, route), route), name=f"hide-{table[route].name}")
         for route in sorted(routes.HIDE)
     ]
+    patterns += [
+        path(route, own_view(table, route), name=f"refuse-{table[route].name}")
+        for route in sorted(routes.REFUSE.keys() - routes.HIDE)
+    ]
     return patterns
+
+
+def own_view(table, route):
+    view = REPLACED.get(route, table[route].callback)
+    return refusing(view, routes.REFUSE[route]) if route in routes.REFUSE else view
