@@ -16,7 +16,7 @@ import type { TProperty, TValue } from "./types";
 import { useProperties } from "./use-properties";
 import { PropertyValueEditor } from "./values/value-editor";
 
-type Props = { workspaceSlug: string; projectId: string; issueId: string; disabled: boolean };
+type Props = { workspaceSlug: string; projectId: string; issueId: string; archived: boolean };
 
 function RowHints({ prop, locked }: { prop: TProperty; locked: boolean }) {
   return (
@@ -39,9 +39,9 @@ function RowHints({ prop, locked }: { prop: TProperty; locked: boolean }) {
   );
 }
 
-/** The item's custom property rows, after Labels in the sidebar and in peek. */
+/** The item's custom property rows, after Labels; the server's can_write decides, not upstream's role flag. */
 export const ItemCustomProperties = observer(function ItemCustomProperties(props: Props) {
-  const { workspaceSlug, projectId, issueId, disabled } = props;
+  const { workspaceSlug, projectId, issueId, archived } = props;
   const store = useProperties();
   const ref = { slug: workspaceSlug, projectId, issueId };
 
@@ -78,7 +78,7 @@ export const ItemCustomProperties = observer(function ItemCustomProperties(props
             <PropertyValueEditor
               prop={prop}
               value={fields.values[prop.key] ?? null}
-              disabled={disabled || !roleAllows}
+              disabled={archived || !roleAllows}
               projectId={projectId}
               onChange={(value) => void save(prop, value)}
             />

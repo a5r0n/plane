@@ -28,14 +28,19 @@ afterEach(() => {
   toast.mockReset();
 });
 
-const setup = (defs: TProperty[], values: Record<string, string | null>, canWrite: Record<string, boolean>) => {
+const setup = (
+  defs: TProperty[],
+  values: Record<string, string | null>,
+  canWrite: Record<string, boolean>,
+  archived = false
+) => {
   const api = {
     list: vi.fn().mockResolvedValue(defs),
     values: vi.fn().mockResolvedValue({ values, can_write: canWrite }),
     setValue: vi.fn(),
   } as unknown as TPropertiesApi & { setValue: ReturnType<typeof vi.fn> };
   holder.store = new PropertiesStore(api);
-  const view = render(<ItemCustomProperties workspaceSlug="acme" projectId="p1" issueId="i1" disabled={false} />);
+  const view = render(<ItemCustomProperties workspaceSlug="acme" projectId="p1" issueId="i1" archived={archived} />);
   return { api, view };
 };
 
@@ -67,6 +72,18 @@ describe("ItemCustomProperties", () => {
       expect(toast).toHaveBeenCalledWith({ type: "error", title: "Couldn't save Customer", message: "too long" })
     );
     expect(screen.getByText("Acme")).toBeTruthy();
+  });
+
+  it("lets a guest edit a property the server says they can write", async () => {
+    setup([prop({ key: "mood", name: "Mood", write_role: 5 })], { mood: "ok" }, { mood: true });
+    await userEvent.click(await screen.findByText("ok"));
+    expect(screen.getByRole("textbox")).toBeTruthy();
+  });
+
+  it("keeps an archived item read-only", async () => {
+    setup([prop({ key: "mood", name: "Mood" })], { mood: "ok" }, { mood: true }, true);
+    await userEvent.click(await screen.findByText("ok"));
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 
   it("renders nothing without visible properties", async () => {

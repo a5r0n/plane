@@ -255,7 +255,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
               workspaceSlug={workspaceSlug}
               projectId={projectId}
               issueId={issueId}
-              disabled={!isEditable}
+              archived={!!issue.archived_at}
             />
           </div>
         </div>

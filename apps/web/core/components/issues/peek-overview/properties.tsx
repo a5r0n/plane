@@ -250,7 +250,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
           workspaceSlug={workspaceSlug}
           projectId={projectId}
           issueId={issueId}
-          disabled={disabled}
+          archived={!!issue.archived_at}
         />
       </div>
     </div>
