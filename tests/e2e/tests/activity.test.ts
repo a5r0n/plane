@@ -11,7 +11,9 @@ const stack = inject("stack");
 const api = new ApiClient(stack.apiKey, stack.workspaceSlug);
 const items = `projects/${stack.projectId}/work-items/`;
 
-type Activity = { id: string; field: string | null; provenance: unknown };
+type Provenance = { channel: string; session: string; agent: string } | null;
+type Activity = { id: string; field: string | null; provenance: Provenance };
+const client = { "X-Client-Session": "sess-e2e", "X-Client-Agent": "pilot" };
 
 // No celery worker here: comment rows come from the task, which pytest covers; step rows are written inline.
 describe("work item activity on the v1 API", () => {
@@ -20,7 +22,7 @@ describe("work item activity on the v1 API", () => {
 
   beforeAll(async () => {
     itemId = (await api.call<{ id: string }>("POST", items, { name: "Activity E2E" })).id;
-    await api.call("POST", `${items}${itemId}/steps/`, { title: "build" });
+    await api.call("POST", `${items}${itemId}/steps/`, { title: "build" }, client);
     await api.call("POST", `${items}${itemId}/comments/`, { comment_html: "<p>via e2e</p>" });
   });
 
@@ -32,6 +34,12 @@ describe("work item activity on the v1 API", () => {
 
     const one = await api.call<Activity>("GET", activities(`${step!.id}/`));
     expect([one.id, one.field, "provenance" in one]).toEqual([step!.id, "step", true]);
+  });
+
+  it("stamps the step row with the request's channel and client headers", async () => {
+    const { results } = await api.call<{ results: Activity[] }>("GET", activities("?per_page=100"));
+    const step = results.find((row) => row.field === "step");
+    expect(step?.provenance).toMatchObject({ channel: "api", session: "sess-e2e", agent: "pilot" });
   });
 
   it("serves the same routes under the issues prefix", async () => {

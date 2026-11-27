@@ -21,6 +21,7 @@ from plane.bgtasks.webhook_task import webhook_activity
 from plane.db.models import Issue, IssueActivity, WorkspaceMember
 from plane.ext.epics.routes import CYCLE, MODULE, P, W
 from plane.ext.models import WorkItemStep
+from plane.ext.provenance import record_provenance
 from plane.ext.properties import CustomFieldsMixin
 from plane.ext.rows import issue_rows
 from plane.ext.session import Session
@@ -175,7 +176,7 @@ def renumber(steps):
 def record(request, issue, verb, comment, old_value, new_value, step_id=None):
     """One activity row and an updated_at bump in this transaction; the issue webhook after commit."""
     now = timezone.now()
-    IssueActivity.objects.create(
+    activity = IssueActivity.objects.create(
         issue_id=issue.id,
         project_id=issue.project_id,
         workspace_id=issue.workspace_id,
@@ -189,6 +190,7 @@ def record(request, issue, verb, comment, old_value, new_value, step_id=None):
         new_identifier=step_id if verb != "deleted" else None,
         epoch=int(now.timestamp()),
     )
+    record_provenance([activity], request)
     # a queryset update: never touches state, assignees or anything else on the item
     Issue.all_objects.filter(pk=issue.id).update(updated_at=now)
     slug, origin = request.parser_context["kwargs"]["slug"], base_host(request=request, is_app=True)
