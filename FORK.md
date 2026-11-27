@@ -236,9 +236,11 @@ reaction and draft rows stay hidden). Each row adds `provenance`: `null` when un
 
 How it's recorded (`plane/ext/provenance.py`): a `before_task_publish` handler stamps the
 `squadron_provenance` header on each `issue_activity` message sent during a request. The task's
-hook (see Hook log) writes one row per activity into `squadron_ext_activity_provenance` (migration
-`0003`). Only rows written by that task carry provenance; rows written inline (steps, custom
-properties) show `null`. A provenance failure is logged and never loses the activity.
+hooks (see Hook log) write one row per activity into `squadron_ext_activity_provenance` (migration
+`0003`): for the rows of its bulk insert and for the "created the issue" row. Step and custom
+property rows are written inline in the request, so they record the request's provenance directly
+(`record_provenance(activities, request)`). A provenance failure is logged and never loses the
+activity.
 
 ## Epics
 
@@ -358,8 +360,9 @@ API token, project), then checks cross-service flows:
 - `tests/mcp.test.ts`: a smoke run of `plane-mcp-server`, pinned by SHA in `src/mcp.ts`, over
   stdio.
 - `tests/epics.test.ts`: the v1 API refusing an epic in a cycle or module.
-- `tests/activity.test.ts`: the fork's activity routes and their `provenance` key. There's no
-  celery worker in the stack, so comment rows and recorded provenance are covered in pytest.
+- `tests/activity.test.ts`: the fork's activity routes, their `provenance` key and the provenance
+  recorded on a step row. There's no celery worker in the stack, so comment rows and the
+  provenance the task records are covered in pytest.
 
 Add a flow as a new `tests/<area>.test.ts`; `inject("stack")` gives it the user, workspace,
 project and API key. To run it locally (needs Node, pnpm and `uv`):
