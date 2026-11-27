@@ -10,7 +10,7 @@ const manifest = JSON.parse(readFileSync(resolve(web, "public/manifest.json"), "
 describe("web app manifest", () => {
   it("root.tsx links exactly one manifest, the credentialed one", () => {
     const root = readFileSync(resolve(web, "app/root.tsx"), "utf8");
-    expect(root.match(/rel: "manifest"/g)).toBeNull();
+    expect(root.match(/rel\s*[=:]\s*\{?\s*["']manifest["']/g)).toBeNull();
     expect(root.match(/MANIFEST_LINK,/g)).toHaveLength(1);
   });
 
