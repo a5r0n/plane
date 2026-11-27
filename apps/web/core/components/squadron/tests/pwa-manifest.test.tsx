@@ -29,7 +29,7 @@ describe("web app manifest", () => {
   it("has 192 and 512 icons and exactly one maskable, all on disk", () => {
     const icons: { src: string; sizes: string; purpose?: string }[] = manifest.icons;
     const any = icons.filter((i) => (i.purpose ?? "any").split(" ").includes("any"));
-    expect(any.map((i) => i.sizes).toSorted()).toEqual(["192x192", "512x512"]);
+    expect(any.map((i) => i.sizes)).toEqual(["192x192", "512x512"]);
     expect(icons.filter((i) => i.purpose?.split(" ").includes("maskable"))).toHaveLength(1);
     for (const icon of icons) expect(existsSync(resolve(web, "public", icon.src.slice(1)))).toBe(true);
   });
