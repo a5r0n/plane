@@ -6,6 +6,7 @@ from django.urls import path
 
 from plane.ext.activity import ActivityDetailAPIEndpoint, ActivityListAPIEndpoint
 from plane.ext.epics.urls import epic_patterns
+from plane.ext.github.views import webhook as github_webhook
 from plane.ext.pages import ProjectPageAPIEndpoint
 from plane.ext.properties import (
     ItemCustomFieldsEndpoint,
@@ -68,6 +69,7 @@ def step_patterns():
 
 
 urlpatterns = [
+    path("github/webhook/", github_webhook, name="squadron-github-webhook"),
     *(
         path(
             PROJECT + tail,

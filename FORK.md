@@ -242,6 +242,43 @@ property rows are written inline in the request, so they record the request's pr
 (`record_provenance(activities, request)`). A provenance failure is logged and never loses the
 activity.
 
+## GitHub webhook
+
+`POST /api/github/webhook/` (`plane/ext/github/`) takes a GitHub App's webhooks and writes them as
+activity rows (field `github`) on the item of the PR they're about. The fork holds no GitHub key and
+calls no GitHub API: everything comes from the payloads.
+
+Env (see `apps/api/.env.example`):
+
+- `GITHUB_WEBHOOK_SECRET`: the App's webhook secret. Unset, the endpoint answers 404.
+- `GITHUB_WEBHOOK_REPOS`: `owner/repo=<project id>,...`. Events from other repos write nothing.
+- `GITHUB_WEBHOOK_ACTOR`: optional user id the rows are written as; null otherwise.
+- `GITHUB_WEBHOOK_CLIENT_AGENT`: the rows' provenance agent (default `github`); channel is `api`.
+
+The endpoint checks `X-Hub-Signature-256` (401 when bad or missing), answers a ping with 200 and
+queues anything else for celery with 202.
+
+- **PR → item:** the item in the repo's project whose Links hold the exact PR url, else whose
+  `deliver —` comment names it; the newest wins.
+- **Rows:** written directly, so no notifications. `old_value` is the delivery id: a redelivery
+  is skipped under an advisory lock. `new_value` is JSON with `pr`, `head_sha`, `login`, `repo`
+  and the verb's own keys; `comment` is a short line.
+- **Verbs:** pull_request closed → `merged` or `closed`, reopened → `reopened`, synchronize →
+  `pushed`, ready_for_review and converted_to_draft → `draft` (`draft` false or true); a
+  submitted review → `review`; a new PR comment or review comment → `comment`; a push to the
+  default branch → `base-moved`, with no item. Anything else writes nothing.
+- **CI:** workflow_run (requested, completed), workflow_job (completed) and status write hidden
+  `checks` rows; a head sha finds its PR through the run's `pull_requests`, the heads seen in
+  pull_request events (kept in Redis for a day) or earlier rows. Once nothing is pending and 30 s
+  have passed since the last completion, one `ci` row says `passed`, `failed` (with the red job
+  and context names) or `didn't run`, and a new one only when that changes. A draft holds every
+  verdict; a PR with no row showing it ready holds only `didn't run`. CI on the default branch
+  is ignored.
+- **Before the link:** an event whose PR has no item yet waits in Redis, retried every minute.
+  It's written once the PR is linked, or dropped an hour after it arrived.
+
+The v1 activity API hides `checks` rows.
+
 ## Epics
 
 An epic is a work item whose type has `is_epic` set. `plane.ext` creates one `Epic` type per
@@ -363,6 +400,8 @@ API token, project), then checks cross-service flows:
 - `tests/activity.test.ts`: the fork's activity routes, their `provenance` key and the provenance
   recorded on a step row. There's no celery worker in the stack, so comment rows and the
   provenance the task records are covered in pytest.
+- `tests/github.test.ts`: the GitHub webhook's signature check, ping and queueing; the rows it
+  writes need celery, so pytest covers them.
 
 Add a flow as a new `tests/<area>.test.ts`; `inject("stack")` gives it the user, workspace,
 project and API key. To run it locally (needs Node, pnpm and `uv`):

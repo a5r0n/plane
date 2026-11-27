@@ -16,6 +16,8 @@ from plane.utils.order_queryset import ACTIVITY_ORDER_BY_ALLOWLIST, sanitize_ord
 
 # upstream leaves comment, vote, reaction and draft out; we keep comments
 HIDDEN_FIELDS = ["vote", "reaction", "draft"]
+# raw CI events behind the GitHub webhook's ci verdict
+HIDDEN_GITHUB_VERBS = ["checks"]
 
 
 class ActivitySerializer(IssueActivitySerializer):
@@ -42,6 +44,7 @@ def activities(request, slug, project_id, issue_id):
         IssueActivity.objects.filter(issue_id=issue_id, workspace__slug=slug, project_id=project_id)
         .filter(
             ~Q(field__in=HIDDEN_FIELDS),
+            ~Q(field="github", verb__in=HIDDEN_GITHUB_VERBS),
             project__project_projectmember__member=request.user,
             project__project_projectmember__is_active=True,
         )
