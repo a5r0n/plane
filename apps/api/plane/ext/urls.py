@@ -6,6 +6,7 @@ from django.urls import path
 
 from plane.ext.activity import ActivityDetailAPIEndpoint, ActivityListAPIEndpoint
 from plane.ext.epics.urls import epic_patterns
+from plane.ext.feed import WorkspaceActivityFeedEndpoint
 from plane.ext.pages import ProjectPageAPIEndpoint
 from plane.ext.properties import (
     ItemCustomFieldsEndpoint,
@@ -88,6 +89,11 @@ urlpatterns = [
         PAGES + "<uuid:page_id>/archive/",
         ProjectPageAPIEndpoint.as_view({"post": "archive", "delete": "unarchive"}),
         name="squadron-project-page-archive",
+    ),
+    path(
+        "v1/workspaces/<str:slug>/activities/",
+        WorkspaceActivityFeedEndpoint.as_view(http_method_names=["get"]),
+        name="squadron-workspace-activities",
     ),
     path(
         "v1/workspaces/<str:slug>/work-items/search/",

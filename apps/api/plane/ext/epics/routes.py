@@ -129,6 +129,9 @@ HIDE = frozenset(LISTS | TOTALS)
 # GET routes that show epics on purpose: full pattern -> reason
 SHOWS = {
     W + "entity-search/": "the mention picker, where an epic is a valid target",
+    "v1/"
+    + W
+    + "activities/": "the activity feed covers every item; the per-item activity routes serve an epic's rows too",
 }
 
 # GET routes whose numbers may change when an epic is added: full pattern -> reason

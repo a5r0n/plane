@@ -47,6 +47,7 @@ def query_variants(route, world):
         "v1/" + W + "work-items/search/": search,
         "v1/" + W + "issues/search/": search,
         W + "entity-search/": [Variant({"query": SEARCH, "query_type": "issue"})],
+        "v1/" + W + "activities/": [Variant({"reader": "new"})],
         W + "analytics/": [
             Variant({"x_axis": "state_id", "y_axis": "issue_count"}),
             Variant({"x_axis": "priority", "y_axis": "issue_count", "segment": "assignees__id"}),

@@ -242,6 +242,33 @@ property rows are written inline in the request, so they record the request's pr
 (`record_provenance(activities, request)`). A provenance failure is logged and never loses the
 activity.
 
+## Activity feed
+
+`plane/ext/feed.py` serves `GET /api/v1/workspaces/{slug}/activities/`: activity rows across the
+workspace, from projects where the caller is an active member and that aren't archived. Rows have
+the Activity API's shape and hidden fields, plus `issue_identifier` (`EP-12`, `null` for a row with
+no item), oldest first. Epics' rows are included, as the per-item activity routes serve them.
+Read-only, no new tables or indexes.
+
+- `reader=new` starts a reader, bound to the API token that asked; another token gets 403
+  `READER_FORBIDDEN`. A reader lasts 10 minutes after its last call, then 410 `READER_GONE`.
+- A reader gets the rows from the last 10 minutes it hasn't acked: `{reader, batch, more, results}`.
+  `ack=<batch>` marks that batch delivered; an unacked batch is sent again, a stale ack is
+  ignored. A row is keyed by id and `created_at`, so a re-dated description row comes again.
+- A call overtaken by a newer call on the same reader returns empty (`batch` null) and records
+  nothing, even with rows waiting and possibly before its wait ends.
+- Each call updates its reader under a short per-reader lock (never across the wait). If the lock
+  stays busy for 3 seconds the call gets 409 `READER_BUSY`; retry it.
+- `since=<ISO datetime>` without a reader returns `{more, results}` from that time on.
+- `wait=0..25` holds the request until rows come, checking about once a second. Under the ASGI
+  worker a held request takes a thread, not the worker.
+- Filters, each a comma list: `project`, `field`, `exclude_field`, `agent` (provenance's agent).
+  `per_page` up to 100.
+
+Readers live in Django's cache (Redis), so losing Redis loses readers: clients start a new one and
+get the 10-minute window again. Rows committed more than 10 minutes after their `created_at` are
+never delivered.
+
 ## Epics
 
 An epic is a work item whose type has `is_epic` set. `plane.ext` creates one `Epic` type per
@@ -363,6 +390,9 @@ API token, project), then checks cross-service flows:
 - `tests/activity.test.ts`: the fork's activity routes, their `provenance` key and the provenance
   recorded on a step row. There's no celery worker in the stack, so comment rows and the
   provenance the task records are covered in pytest.
+- `tests/activity-feed.test.ts`: the workspace feed: a new reader, ack then an empty wait, a step
+  waking a held request, and a plain request served while more feed requests are held than there
+  are workers.
 
 Add a flow as a new `tests/<area>.test.ts`; `inject("stack")` gives it the user, workspace,
 project and API key. To run it locally (needs Node, pnpm and `uv`):
