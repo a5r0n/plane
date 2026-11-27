@@ -2313,7 +2313,7 @@ class IssueRelationListCreateAPIEndpoint(BaseAPIView):
     @work_item_relation_docs(
         operation_id="list_work_item_relations",
         summary="List work item relations",
-        description="Retrieve all relationships for a work item including blocking, blocked_by, duplicate, relates_to, start_before, start_after, finish_before, and finish_after relations.",  # noqa E501
+        description="Retrieve all relationships for a work item including blocking, blocked_by, duplicate, relates_to, start_before, start_after, finish_before, finish_after, implemented_by, and implements relations.",  # noqa E501 squadron
         parameters=[
             ISSUE_ID_PARAMETER,
             CURSOR_PARAMETER,
@@ -2396,6 +2396,8 @@ class IssueRelationListCreateAPIEndpoint(BaseAPIView):
             "start_before": [],
             "finish_after": [],
             "finish_before": [],
+            "implemented_by": [],  # squadron
+            "implements": [],  # squadron
         }
         seen_duplicate = set()
         seen_relates_to = set()
@@ -2451,13 +2453,23 @@ class IssueRelationListCreateAPIEndpoint(BaseAPIView):
                     response_data["finish_before"].append(
                         {"project_id": str(rel["related_issue_project_id"]), "issue_id": str(rel["related_issue_id"])}
                     )
+            # squadron: stored as idea (issue) implemented_by build item (related_issue)
+            elif rt == "implemented_by":
+                if str(rel["related_issue_id"]) == str(issue_id):
+                    response_data["implements"].append(
+                        {"project_id": str(rel["issue_project_id"]), "issue_id": str(rel["issue_id"])}
+                    )
+                if str(rel["issue_id"]) == str(issue_id):
+                    response_data["implemented_by"].append(
+                        {"project_id": str(rel["related_issue_project_id"]), "issue_id": str(rel["related_issue_id"])}
+                    )
 
         return Response(response_data, status=status.HTTP_200_OK)
 
     @work_item_relation_docs(
         operation_id="create_work_item_relation",
         summary="Create work item relation",
-        description="Create relationships between work items. Supports various relation types including blocking, blocked_by, duplicate, relates_to, start_before, start_after, finish_before, and finish_after.",  # noqa E501
+        description="Create relationships between work items. Supports various relation types including blocking, blocked_by, duplicate, relates_to, start_before, start_after, finish_before, finish_after, implemented_by, and implements.",  # noqa E501 squadron
         parameters=[
             ISSUE_ID_PARAMETER,
         ],
@@ -2521,7 +2533,7 @@ class IssueRelationListCreateAPIEndpoint(BaseAPIView):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
 
         actual_relation = get_actual_relation(relation_type)
-        is_reverse = relation_type in ["blocking", "start_after", "finish_after"]
+        is_reverse = relation_type in ["blocking", "start_after", "finish_after", "implements"]  # squadron
 
         # Scope to workspace to prevent cross-tenant IDOR
         # Relations can cross projects so only workspace scope is enforced

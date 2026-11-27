@@ -79,6 +79,14 @@ activity on both items records the removal. The relation type is read from the s
 callers send only `related_issue`. It answers 204, 400 without a valid `related_issue`, and 404 when
 the work item isn't in the project or the pair has no relation.
 
+The fork turns on upstream's dormant `implemented_by` / `implements` pair: an idea (or any item) is
+`implemented_by` the items that build it, and each of those `implements` it. It's stored as one
+`issue_relations` row (`implemented_by`, from the idea to the build item), so it needs no migration.
+`POST .../work-items/<id>/relations/` takes either type, `GET .../relations/` returns
+`implemented_by` and `implements` keys next to the other eight, the remove route above clears it from
+either side, and the activity on both items names it from that item's side. The item page's
+Relations widget shows "Implemented by" and "Implements", and you can add either from it.
+
 ## PQL filtering
 
 `plane.ext` shadows the v1 project work item list (`workspaces/<slug>/projects/<id>/work-items/` and

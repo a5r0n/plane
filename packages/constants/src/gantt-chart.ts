@@ -11,4 +11,6 @@ export const REVERSE_RELATIONS: { [key in TIssueRelationTypes]: TIssueRelationTy
   blocking: "blocked_by",
   relates_to: "relates_to",
   duplicate: "duplicate",
+  implemented_by: "implements", // squadron
+  implements: "implemented_by", // squadron
 };

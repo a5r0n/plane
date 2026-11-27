@@ -24,6 +24,15 @@ export const getRelationActivityContent = (activity: TIssueActivity | undefined)
         : `removed this work item as a duplicate of `;
     case "relates_to":
       return activity.old_value === "" ? `marked that this work item relates to ` : `removed the relation from `;
+    // squadron
+    case "implemented_by":
+      return activity.old_value === ""
+        ? `marked this work item as implemented by `
+        : `removed this work item being implemented by `;
+    case "implements":
+      return activity.old_value === ""
+        ? `marked this work item as implementing `
+        : `removed this work item implementing `;
   }
 
   return;

@@ -541,6 +541,15 @@ class IssueRelationResponseSerializer(serializers.Serializer):
         child=IssueRelationRefSerializer(),
         help_text="Work items that finish before this issue",
     )
+    # squadron: the implemented_by / implements pair
+    implemented_by = serializers.ListField(
+        child=IssueRelationRefSerializer(),
+        help_text="Work items that implement this issue",
+    )
+    implements = serializers.ListField(
+        child=IssueRelationRefSerializer(),
+        help_text="Work items this issue implements",
+    )
 
 
 class IssueRelationCreateSerializer(serializers.Serializer):
@@ -560,6 +569,8 @@ class IssueRelationCreateSerializer(serializers.Serializer):
         ("start_after", "Start After"),
         ("finish_before", "Finish Before"),
         ("finish_after", "Finish After"),
+        ("implemented_by", "Implemented By"),  # squadron
+        ("implements", "Implements"),  # squadron
     ]
 
     relation_type = serializers.ChoiceField(

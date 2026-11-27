@@ -1366,7 +1366,11 @@ def delete_issue_relation_activity(
                 else (
                     "blocked_by"
                     if requested_data.get("relation_type") == "blocking"
-                    else requested_data.get("relation_type")
+                    else (
+                        get_inverse_relation(requested_data.get("relation_type"))  # squadron
+                        if requested_data.get("relation_type") in ("implemented_by", "implements")
+                        else requested_data.get("relation_type")
+                    )
                 )
             ),
             project_id=project_id,

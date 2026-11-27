@@ -12,6 +12,8 @@ import { useParams } from "next/navigation";
 import {
   TagIcon,
   CopyPlus,
+  Hammer, // squadron
+  Lightbulb, // squadron
   Calendar,
   Link2Icon,
   Users2Icon,
@@ -635,6 +637,45 @@ const activityDetails: {
         );
     },
     icon: <BlockedIcon height="12" width="12" className="text-secondary" />,
+  },
+  // squadron: implemented_by / implements
+  implemented_by: {
+    message: (activity, showIssue) => {
+      if (activity.old_value === "")
+        return (
+          <>
+            marked {showIssue ? <IssueLink activity={activity} /> : "this work item"} as implemented by{" "}
+            <span className="font-medium whitespace-nowrap text-primary">{activity.new_value}</span>.
+          </>
+        );
+      else
+        return (
+          <>
+            removed {showIssue ? <IssueLink activity={activity} /> : "this work item"} being implemented by{" "}
+            <span className="font-medium whitespace-nowrap text-primary">{activity.old_value}</span>.
+          </>
+        );
+    },
+    icon: <Hammer size={12} className="text-secondary" />,
+  },
+  implements: {
+    message: (activity, showIssue) => {
+      if (activity.old_value === "")
+        return (
+          <>
+            marked {showIssue ? <IssueLink activity={activity} /> : "this work item"} as implementing{" "}
+            <span className="font-medium whitespace-nowrap text-primary">{activity.new_value}</span>.
+          </>
+        );
+      else
+        return (
+          <>
+            removed {showIssue ? <IssueLink activity={activity} /> : "this work item"} implementing{" "}
+            <span className="font-medium whitespace-nowrap text-primary">{activity.old_value}</span>.
+          </>
+        );
+    },
+    icon: <Lightbulb size={12} className="text-secondary" />,
   },
   duplicate: {
     message: (activity, showIssue) => {
