@@ -80,11 +80,12 @@ def handle(repo, project_id, entry):
         value["sha"] = fact["sha"]
         _write_once(project_id, None, delivery, fact, value)
         return
+    name = entry.get("name") or repo  # the payload's casing, as in the PR's url
     if fact["pr"]:
-        url = events.pr_url(repo, fact["pr"])
+        url = events.pr_url(name, fact["pr"])
     else:
         number = cache.head(repo, fact["sha"]) if fact["sha"] else None
-        url = events.pr_url(repo, number) if number else match.pr_for_sha(project_id, fact["sha"])
+        url = events.pr_url(name, number) if number else match.pr_for_sha(project_id, fact["sha"])
         if url is None:
             cache.wait(repo, f"sha:{fact['sha']}", entry, _schedule_retry)
             return
@@ -98,12 +99,14 @@ def handle(repo, project_id, entry):
     if fact["verb"] == "checks":
         _schedule_ci(project_id, issue_id, url, fact["sha"], ci.SETTLE)
     elif fact["verb"] == "draft" and not fact["data"]["draft"] and fact["sha"]:
-        _schedule_ci(project_id, issue_id, url, fact["sha"], 0)
+        # leaves time for the run a ready PR starts to be requested
+        _schedule_ci(project_id, issue_id, url, fact["sha"], ci.SETTLE)
 
 
 @shared_task
 def github_delivery(delivery, event, payload):
-    repo = ((payload.get("repository") or {}).get("full_name") or "").lower()
+    name = (payload.get("repository") or {}).get("full_name") or ""
+    repo = name.lower()
     project_id = config.repos().get(repo)
     if not project_id:
         return
@@ -112,7 +115,11 @@ def github_delivery(delivery, event, payload):
     for sha, number in found:
         cache.remember_head(repo, sha, number)
     for fact in events.facts(event, payload):
-        handle(repo, project_id, {"delivery": delivery, "login": login, "fact": fact, "received": cache.now()})
+        handle(
+            repo,
+            project_id,
+            {"delivery": delivery, "name": name, "login": login, "fact": fact, "received": cache.now()},
+        )
     for sha, _ in found:
         if cache.waiting(repo, f"sha:{sha}"):
             github_retry(repo, f"sha:{sha}")
@@ -123,7 +130,7 @@ def github_retry(repo, what):
     """Retry the entries parked under `what`; one still unlinked parks again until its hour is up."""
     project_id = config.repos().get(repo)
     for entry in cache.take(repo, what):
-        if project_id:
+        if project_id and not cache.expired(entry):
             handle(repo, project_id, entry)
 
 

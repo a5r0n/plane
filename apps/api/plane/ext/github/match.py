@@ -21,6 +21,20 @@ def _names(text, url):
     return any(found.lower() == url.lower() for found in PR_RE.findall(text or ""))
 
 
+def _delivers(comment, url):
+    """A `deliver —` comment counts for its first PR the item links, else its first PR (Tower's rule)."""
+    if not DELIVER_RE.match(html.unescape(strip_tags(comment.comment_html))):
+        return False
+    urls = PR_RE.findall(comment.comment_html)
+    linked = {
+        found.lower()
+        for link in IssueLink.objects.filter(issue_id=comment.issue_id).only("url")
+        for found in PR_RE.findall(link.url or "")
+    }
+    named = next((u for u in urls if u.lower() in linked), urls[0] if urls else None)
+    return bool(named) and named.lower() == url.lower()
+
+
 def item_for(project_id, url):
     """The id of the item whose Links hold the PR url, else whose `deliver —` comment names it; newest wins."""
     found = []
@@ -32,8 +46,7 @@ def item_for(project_id, url):
         project_id=project_id, comment_html__icontains=url, issue__deleted_at__isnull=True
     )
     for comment in comments.only("issue_id", "comment_html", "created_at"):
-        text = html.unescape(strip_tags(comment.comment_html))
-        if DELIVER_RE.match(text) and _names(comment.comment_html, url):
+        if _delivers(comment, url):
             found.append((comment.created_at, comment.issue_id))
     return str(max(found)[1]) if found else None
 

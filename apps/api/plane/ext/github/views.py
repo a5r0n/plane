@@ -18,7 +18,7 @@ from plane.ext.github.tasks import github_delivery
 
 def signed(secret, body, header):
     expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return bool(header) and hmac.compare_digest(expected, header)
+    return bool(header) and hmac.compare_digest(expected.encode(), header.encode())
 
 
 @csrf_exempt

@@ -22,7 +22,7 @@ from plane.settings.redis import redis_instance
 SECRET = "s3cret"
 REPO = "Acme/App"
 PR = 7
-URL = f"https://github.com/{REPO.lower()}/pull/{PR}"
+URL = f"https://github.com/{REPO}/pull/{PR}"  # the payload's casing, as GitHub links it
 SHA = "a" * 40
 URL_PATH = "/api/github/webhook/"
 
@@ -163,7 +163,7 @@ class TestEndpoint:
         assert self.post(body, signature=sign(body)).status_code == 404
         assert queued == []
 
-    @pytest.mark.parametrize("signature", [None, "", "sha256=00", sign(b"{}", "wrong")])
+    @pytest.mark.parametrize("signature", [None, "", "sha256=00", "sha256=\u00e9", sign(b"{}", "wrong")])
     def test_bad_or_missing_signature_is_401(self, env, queued, signature):
         assert self.post(b"{}", signature=signature).status_code == 401
         assert queued == []
@@ -218,6 +218,19 @@ def test_deliver_comment_links_the_pr(env, issue, scheduled, create_user):
     )
     deliver("pull_request", pr_event("closed", merged=False))
     assert [r.verb for r in rows(issue)] == ["closed"]
+
+
+@pytest.mark.django_db
+def test_a_deliver_naming_two_prs_counts_for_its_first(env, issue, scheduled, create_user):
+    IssueComment.objects.create(
+        issue=issue,
+        project=issue.project,
+        workspace=issue.workspace,
+        actor=create_user,
+        comment_html=f"<p>deliver — {URL}0 builds on {URL}</p>",
+    )
+    deliver("pull_request", pr_event("reopened"))
+    assert rows() == []
 
 
 @pytest.mark.django_db
@@ -397,7 +410,7 @@ def test_ci_didnt_run_is_held_until_the_pr_is_seen_ready(env, linked, scheduled)
     settle(linked)
     assert verdicts(linked) == []  # no row says the PR is ready
     deliver("pull_request", pr_event("ready_for_review"))
-    assert scheduled["ci"][-1][-1] == 0
+    assert scheduled["ci"][-1][-1] == 30  # time for a newly requested run to land
     settle(linked)
     assert verdicts(linked) == [DIDNT_RUN]
 
