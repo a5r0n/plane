@@ -17,7 +17,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import APIToken, IssueActivity, ProjectMember
-from plane.ext.feed import WorkspaceActivityFeedEndpoint, reader_key
+from plane.ext.feed import READER_TTL, WorkspaceActivityFeedEndpoint, reader_key
 from plane.ext.models import ActivityProvenance
 from plane.ext.tests.conftest import make_issue, make_project
 
@@ -50,6 +50,23 @@ def feed(workspace, api_key_client):
         return response.status_code, response.json()
 
     return call
+
+
+@pytest.fixture
+def during_hold(monkeypatch):
+    """Run a callback inside the next call that waits, as if newer calls overtook it."""
+    hold = WorkspaceActivityFeedEndpoint.hold
+
+    def install(callback):
+        def patched(self, wait, poll):
+            if wait:
+                monkeypatch.setattr(WorkspaceActivityFeedEndpoint, "hold", hold)
+                callback()
+            return hold(self, wait, poll)
+
+        monkeypatch.setattr(WorkspaceActivityFeedEndpoint, "hold", patched)
+
+    return install
 
 
 @pytest.fixture
@@ -92,6 +109,15 @@ class TestReader:
         assert feed(reader=body["reader"])[0] == 410
         status, gone = feed(reader="never-issued")
         assert status == 410 and gone["code"] == "READER_GONE"
+
+    def test_reader_expires_after_ten_idle_minutes(self, feed, issue):
+        _, body = feed(reader="new")
+        assert READER_TTL == 600
+        assert 590 <= cache.ttl(reader_key(body["reader"])) <= READER_TTL
+        cache.expire(reader_key(body["reader"]), 5)
+        feed(reader=body["reader"])
+        # every call starts the idle clock again
+        assert 590 <= cache.ttl(reader_key(body["reader"])) <= READER_TTL
 
     def test_ack_marks_the_batch_delivered(self, feed, issue):
         add_row(issue)
@@ -150,6 +176,38 @@ class TestReader:
         _, second = feed(reader=first["reader"], ack=first["batch"], per_page=2)
         assert second["more"] is False and ids(second) == [str(rows[2].id)]
 
+    def test_overtaken_held_call_keeps_newer_acks(self, feed, issue, during_hold):
+        _, first = feed(reader="new")
+        reader = first["reader"]
+        newer = {}
+
+        def overtake():
+            newer["row"] = add_row(issue)
+            _, delivered = feed(reader=reader, ack=first["batch"])
+            feed(reader=reader, ack=delivered["batch"])
+
+        during_hold(overtake)
+        _, held = feed(reader=reader, wait=1)
+        assert held["results"] == [] and held["batch"] is None
+        _, after = feed(reader=reader)
+        assert str(newer["row"].id) not in ids(after)
+
+    def test_overtaken_held_call_keeps_newer_batch(self, feed, issue, during_hold):
+        _, first = feed(reader="new")
+        reader = first["reader"]
+        newer = {}
+
+        def overtake():
+            add_row(issue)
+            _, newer["page"] = feed(reader=reader, ack=first["batch"])
+
+        during_hold(overtake)
+        _, held = feed(reader=reader, wait=1)
+        assert held["results"] == []
+        assert newer["page"]["results"]
+        _, after = feed(reader=reader, ack=newer["page"]["batch"])
+        assert after["results"] == []
+
     def test_wait_times_out_empty(self, feed, issue):
         _, first = feed(reader="new")
         started = time.monotonic()
@@ -189,6 +247,12 @@ class TestRows:
         hidden = add_row(make_issue(stranger_project, "Not mine"))
         assert str(hidden.id) not in ids(feed(reader="new")[1])
 
+    def test_soft_deleted_membership_left_out(self, feed, workspace, create_user, issue):
+        gone_project = make_project(workspace, create_user, "Gone", "GN")
+        ProjectMember.objects.filter(project=gone_project, member=create_user).update(deleted_at=timezone.now())
+        hidden = add_row(make_issue(gone_project, "Was mine"))
+        assert str(hidden.id) not in ids(feed(reader="new")[1])
+
     def test_archived_project_left_out(self, feed, issue, other_project):
         hidden = add_row(make_issue(other_project, "Archived"))
         other_project.archived_at = timezone.now()
@@ -222,6 +286,12 @@ class TestRows:
     )
     def test_bad_params(self, feed, params):
         assert feed(**params)[0] == 400
+
+    @pytest.mark.parametrize("name", ["field", "exclude_field", "agent", "reader"])
+    def test_nul_byte_is_a_bad_param(self, feed, name):
+        params = {"reader": "new", name: "a\x00b"}
+        status, body = feed(**params)
+        assert status == 400 and body["code"] == "INVALID_PARAM"
 
     def test_bad_project_filter(self, feed):
         assert feed(reader="new", project="not-a-uuid")[0] == 400

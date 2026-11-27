@@ -95,6 +95,7 @@ class WorkspaceActivityFeedEndpoint(BaseAPIView):
             workspace__slug=slug,
             project__project_projectmember__member=request.user,
             project__project_projectmember__is_active=True,
+            project__project_projectmember__deleted_at__isnull=True,
             project__archived_at__isnull=True,
         ).distinct()
         if projects := csv(params.get("project")):
@@ -127,6 +128,9 @@ class WorkspaceActivityFeedEndpoint(BaseAPIView):
 
     def feed(self, request, slug):
         params = request.query_params
+        # Postgres can't store or compare a NUL byte
+        if any("\x00" in value for _, values in params.lists() for value in values):
+            raise FeedError("INVALID_PARAM", "Parameters can't contain a NUL byte.")
         wait = bounded_int(params, "wait", 0, 0, MAX_WAIT)
         per_page = bounded_int(params, "per_page", MAX_PER_PAGE, 1, MAX_PER_PAGE)
         reader = params.get("reader")
@@ -176,6 +180,7 @@ class WorkspaceActivityFeedEndpoint(BaseAPIView):
         if ack and batch and ack == batch["id"]:
             record["acked"].update(batch["keys"])
             record["batch"] = None
+        call = record["call"] = secrets.token_urlsafe(8)
         cache.set(reader_key(reader), record, READER_TTL)
 
         def poll():
@@ -190,6 +195,10 @@ class WorkspaceActivityFeedEndpoint(BaseAPIView):
             return undelivered[: per_page + 1]
 
         pending = self.hold(wait, poll)
+        # a newer call on this reader took over while we held: its state wins
+        latest = cache.get(reader_key(reader))
+        if latest is None or latest.get("call") != call:
+            return Response({"reader": reader, "batch": None, "more": False, "results": []})
         page = pending[:per_page]
 
         # forget acks for rows that have left the window
