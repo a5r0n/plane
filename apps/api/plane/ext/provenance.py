@@ -6,6 +6,7 @@
 
 from celery import current_task
 from crum import get_current_request
+from django.db import transaction
 
 from plane.db.models import APIToken
 from plane.ext.models import ActivityProvenance
@@ -62,27 +63,30 @@ def task_provenance():
     return getattr(request, HEADER, None) or (getattr(request, "headers", None) or {}).get(HEADER)
 
 
-def record_provenance(activities):
-    """Store the running task's provenance for the activities it just created; never raises."""
+def record_provenance(activities, request=None):
+    """Store the provenance of `request` (else the running task's) for the activities just created; never raises."""
+    if not activities:
+        return
     try:
-        provenance = task_provenance()
-        if not provenance or not activities:
-            return
-        token = provenance.get("token")
-        if token and not APIToken.objects.filter(pk=token).exists():
-            token = None  # deleted between the request and the task
-        ActivityProvenance.objects.bulk_create(
-            [
-                ActivityProvenance(
-                    activity_id=activity.id,
-                    channel=provenance["channel"],
-                    api_token_id=token,
-                    client_session=(provenance.get("session") or "")[:LIMIT],
-                    client_agent=(provenance.get("agent") or "")[:LIMIT],
-                )
-                for activity in activities
-            ],
-            ignore_conflicts=True,
-        )
+        with transaction.atomic():  # a savepoint: a failure here must not abort the caller's transaction
+            provenance = from_request(request) if request is not None else task_provenance()
+            if not provenance:
+                return
+            token = provenance.get("token")
+            if token and not APIToken.objects.filter(pk=token).exists():
+                token = None  # deleted between the request and the task
+            ActivityProvenance.objects.bulk_create(
+                [
+                    ActivityProvenance(
+                        activity_id=activity.id,
+                        channel=provenance["channel"],
+                        api_token_id=token,
+                        client_session=(provenance.get("session") or "")[:LIMIT],
+                        client_agent=(provenance.get("agent") or "")[:LIMIT],
+                    )
+                    for activity in activities
+                ],
+                ignore_conflicts=True,
+            )
     except Exception as e:
         log_exception(e)

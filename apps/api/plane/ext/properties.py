@@ -24,6 +24,7 @@ from plane.bgtasks.webhook_task import webhook_activity
 from plane.db.models import Issue, IssueActivity, Project, ProjectMember, User
 from plane.utils.host import base_host
 from plane.ext.models import CustomProperty, CustomValue
+from plane.ext.provenance import record_provenance
 from plane.ext.session import Session
 
 T = CustomProperty.Type
@@ -276,7 +277,7 @@ def write_values(request, issue_id, plan):
     props = [prop for prop, _ in plan]
     current = _current(issue.id, props)
     now = timezone.now()
-    old_json, new_json = {}, {}
+    old_json, new_json, activities = {}, {}, []
     for prop, new in plan:
         old = current[prop.id]
         if old == new:
@@ -296,7 +297,7 @@ def write_values(request, issue_id, plan):
             )
             for i, value in enumerate(new)
         )
-        IssueActivity.objects.create(
+        activity = IssueActivity.objects.create(
             issue_id=issue.id,
             project_id=issue.project_id,
             workspace_id=issue.workspace_id,
@@ -310,7 +311,9 @@ def write_values(request, issue_id, plan):
             new_identifier=prop.id,
             epoch=int(now.timestamp()),
         )
+        activities.append(activity)
         old_json[prop.key], new_json[prop.key] = to_json(prop, old), to_json(prop, new)
+    record_provenance(activities, request)
     if not new_json:
         return
     Issue.all_objects.filter(pk=issue.id).update(updated_at=now)
