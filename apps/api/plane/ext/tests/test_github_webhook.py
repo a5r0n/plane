@@ -39,8 +39,11 @@ def pull(**extra):
     return {"number": PR, "head": {"sha": SHA}, "base": {"ref": "main"}, "draft": False, **extra}
 
 
-def pr_event(action, **extra):
-    return {"action": action, "pull_request": pull(**extra), "repository": repository(), "sender": {"login": "octo"}}
+def pr_event(action, before=None, **extra):
+    payload = {"action": action, "pull_request": pull(**extra), "repository": repository(), "sender": {"login": "octo"}}
+    if before:
+        payload["before"] = before  # GitHub sends a synchronize's old head at the top level
+    return payload
 
 
 def run_event(action, conclusion=None, run_id=1, attempt=1, prs=(PR,), name="CI", sha=SHA, branch="feature"):
