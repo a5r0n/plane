@@ -304,4 +304,4 @@ class TestImplementsRelationSession:
         assert [i["id"] for i in idea_view["implemented_by"]] == [build.id]
         assert [i["relation_type"] for i in idea_view["implemented_by"]] == ["implemented_by"]
         assert [i["id"] for i in build_view["implements"]] == [idea.id]
-        assert idea_view["implements"] == [] and build_view["implemented_by"] == []
+        assert list(idea_view["implements"]) == [] and list(build_view["implemented_by"]) == []
