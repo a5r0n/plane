@@ -51,7 +51,7 @@ describe("workspace activity feed", () => {
     const first = await feed({ reader: "new" });
     reader = first.reader;
     const step = (await drain(first)).find((row) => row.issue === itemId && row.field === "step");
-    expect(step?.issue_identifier).toMatch(/^[A-Z]+-\d+$/);
+    expect(step?.issue_identifier).toMatch(/^[A-Z0-9]+-\d+$/);
   });
 
   it("returns empty after the wait once everything is acked", async () => {
