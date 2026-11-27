@@ -170,3 +170,138 @@ class TestRemoveRelation:
 
         assert remove(api_client, a, b.id).status_code == status.HTTP_401_UNAUTHORIZED
         assert IssueRelation.objects.exists()
+
+
+UPSTREAM_KEYS = {
+    "blocking",
+    "blocked_by",
+    "duplicate",
+    "relates_to",
+    "start_after",
+    "start_before",
+    "finish_after",
+    "finish_before",
+}
+
+
+def ref(issue):
+    return {"project_id": str(issue.project_id), "issue_id": str(issue.id)}
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+class TestImplementsRelation:
+    @pytest.fixture
+    def pair(self, project, create_user):
+        return make_issue(project, create_user, "Idea"), make_issue(project, create_user, "Build")
+
+    @pytest.fixture(autouse=True)
+    def create_activity(self):
+        with mock.patch("plane.api.views.issue.issue_activity.delay") as delay:
+            yield delay
+
+    def create(self, client, issue, relation_type, related):
+        return client.post(
+            relations_url(issue), {"relation_type": relation_type, "issues": [str(related.id)]}, format="json"
+        )
+
+    @pytest.mark.parametrize("from_build_side", [False, True])
+    def test_create_from_either_side_stores_one_row(self, api_key_client, pair, from_build_side):
+        idea, build = pair
+        if from_build_side:
+            response = self.create(api_key_client, build, "implements", idea)
+        else:
+            response = self.create(api_key_client, idea, "implemented_by", build)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        row = IssueRelation.objects.get()
+        assert (row.issue_id, row.related_issue_id, row.relation_type) == (idea.id, build.id, "implemented_by")
+
+        idea_view = api_key_client.get(relations_url(idea)).data
+        build_view = api_key_client.get(relations_url(build)).data
+        assert idea_view["implemented_by"] == [ref(build)]
+        assert idea_view["implements"] == []
+        assert build_view["implements"] == [ref(idea)]
+        assert build_view["implemented_by"] == []
+
+    def test_create_records_the_type_on_both_items(self, api_key_client, pair, create_activity):
+        idea, build = pair
+        self.create(api_key_client, build, "implements", idea)
+
+        with mock.patch("plane.bgtasks.issue_activities_task.notifications.delay"):
+            issue_activity(**create_activity.call_args.kwargs)
+
+        assert IssueActivity.objects.get(issue=build, verb="updated").field == "implements"
+        assert IssueActivity.objects.get(issue=idea, verb="updated").field == "implemented_by"
+
+    @pytest.mark.parametrize(
+        ("from_build_side", "caller_field", "other_field"),
+        [(False, "implemented_by", "implements"), (True, "implements", "implemented_by")],
+    )
+    def test_remove_from_either_side_clears_both(
+        self, api_key_client, pair, activity, from_build_side, caller_field, other_field
+    ):
+        idea, build = pair
+        relate(idea, build, "implemented_by")
+        caller, other = (build, idea) if from_build_side else (idea, build)
+
+        assert remove(api_key_client, caller, other.id).status_code == status.HTTP_204_NO_CONTENT
+        activity.run()
+
+        assert not IssueRelation.objects.exists()
+        for issue in pair:
+            listed = api_key_client.get(relations_url(issue)).data
+            assert listed["implemented_by"] == [] and listed["implements"] == []
+        assert IssueActivity.objects.get(issue=caller, verb="deleted").field == caller_field
+        assert IssueActivity.objects.get(issue=other, verb="deleted").field == other_field
+
+    def test_unknown_type_is_rejected(self, api_key_client, pair):
+        idea, build = pair
+        response = self.create(api_key_client, idea, "built_by", build)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert not IssueRelation.objects.exists()
+
+    def test_existing_types_keep_their_shape(self, api_key_client, pair, project, create_user):
+        idea, build = pair
+        blocker = make_issue(project, create_user, "Blocker")
+        relate(idea, blocker, "blocked_by")
+        relate(idea, build, "implemented_by")
+
+        listed = api_key_client.get(relations_url(idea)).data
+
+        assert set(listed) == UPSTREAM_KEYS | {"implemented_by", "implements"}
+        assert listed["blocked_by"] == [ref(blocker)]
+        assert all(listed[key] == [] for key in UPSTREAM_KEYS - {"blocked_by"})
+        assert api_key_client.get(relations_url(blocker)).data["blocking"] == [ref(idea)]
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+class TestImplementsRelationSession:
+    @pytest.fixture
+    def pair(self, project, create_user):
+        return make_issue(project, create_user, "Idea"), make_issue(project, create_user, "Build")
+
+    def url(self, issue, tail):
+        return f"/api/workspaces/{issue.workspace.slug}/projects/{issue.project_id}/issues/{issue.id}/{tail}/"
+
+    def test_create_from_build_side_and_list_both(self, session_client, pair):
+        idea, build = pair
+        with mock.patch("plane.app.views.issue.relation.issue_activity.delay"):
+            response = session_client.post(
+                self.url(build, "issue-relation"),
+                {"relation_type": "implements", "issues": [str(idea.id)]},
+                format="json",
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        row = IssueRelation.objects.get()
+        assert (row.issue_id, row.related_issue_id, row.relation_type) == (idea.id, build.id, "implemented_by")
+
+        idea_view = session_client.get(self.url(idea, "issue-relation")).data
+        build_view = session_client.get(self.url(build, "issue-relation")).data
+        assert [i["id"] for i in idea_view["implemented_by"]] == [build.id]
+        assert [i["relation_type"] for i in idea_view["implemented_by"]] == ["implemented_by"]
+        assert [i["id"] for i in build_view["implements"]] == [idea.id]
+        assert idea_view["implements"] == [] and build_view["implemented_by"] == []

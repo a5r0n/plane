@@ -14,4 +14,11 @@ export type TIssueRelationMap = {
 
 export type TIssueRelationIdMap = Record<TIssueRelationTypes, string[]>;
 
-export type TIssueRelationTypes = "blocking" | "blocked_by" | "duplicate" | "relates_to";
+// squadron: implemented_by / implements
+export type TIssueRelationTypes =
+  | "blocking"
+  | "blocked_by"
+  | "duplicate"
+  | "relates_to"
+  | "implemented_by"
+  | "implements";

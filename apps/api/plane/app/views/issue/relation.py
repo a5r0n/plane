@@ -99,6 +99,14 @@ class IssueRelationViewSet(BaseViewSet):
             "related_issue_id", flat=True
         )
 
+        # squadron: build items that implement this one, and the ideas this one implements
+        implemented_by_issues = issue_relations.filter(relation_type="implemented_by", issue_id=issue_id).values_list(
+            "related_issue_id", flat=True
+        )
+        implements_issues = issue_relations.filter(
+            relation_type="implemented_by", related_issue_id=issue_id
+        ).values_list("issue_id", flat=True)
+
         queryset = (
             Issue.issue_objects.filter(workspace__slug=slug)
             .select_related("workspace", "project", "state", "parent")
@@ -202,6 +210,13 @@ class IssueRelationViewSet(BaseViewSet):
             "finish_before": queryset.filter(pk__in=finish_before_issues)
             .annotate(relation_type=Value("finish_before", output_field=CharField()))
             .values(*fields),
+            # squadron
+            "implemented_by": queryset.filter(pk__in=implemented_by_issues)
+            .annotate(relation_type=Value("implemented_by", output_field=CharField()))
+            .values(*fields),
+            "implements": queryset.filter(pk__in=implements_issues)
+            .annotate(relation_type=Value("implements", output_field=CharField()))
+            .values(*fields),
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
@@ -216,6 +231,7 @@ class IssueRelationViewSet(BaseViewSet):
 
         issues = request.data.get("issues", [])
         project = Project.objects.get(pk=project_id)
+        is_reverse = relation_type in ["blocking", "start_after", "finish_after", "implements"]  # squadron
 
         # Scope to workspace to prevent cross-tenant IDOR
         # Relations can cross projects so only workspace scope is enforced
@@ -229,10 +245,8 @@ class IssueRelationViewSet(BaseViewSet):
         issue_relation = IssueRelation.objects.bulk_create(
             [
                 IssueRelation(
-                    issue_id=(issue if relation_type in ["blocking", "start_after", "finish_after"] else issue_id),
-                    related_issue_id=(
-                        issue_id if relation_type in ["blocking", "start_after", "finish_after"] else issue
-                    ),
+                    issue_id=(issue if is_reverse else issue_id),  # squadron
+                    related_issue_id=(issue_id if is_reverse else issue),  # squadron
                     relation_type=(get_actual_relation(relation_type)),
                     project_id=project_id,
                     workspace_id=project.workspace_id,
@@ -257,7 +271,7 @@ class IssueRelationViewSet(BaseViewSet):
             origin=base_host(request=request, is_app=True),
         )
 
-        if relation_type in ["blocking", "start_after", "finish_after"]:
+        if is_reverse:  # squadron
             return Response(
                 RelatedIssueSerializer(issue_relation, many=True).data,
                 status=status.HTTP_201_CREATED,
