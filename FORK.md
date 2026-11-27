@@ -255,6 +255,10 @@ Read-only, no new tables or indexes.
 - A reader gets the rows from the last 10 minutes it hasn't acked: `{reader, batch, more, results}`.
   `ack=<batch>` marks that batch delivered; an unacked batch is sent again, a stale ack is
   ignored. A row is keyed by id and `created_at`, so a re-dated description row comes again.
+- A call overtaken by a newer call on the same reader returns empty (`batch` null) and records
+  nothing, even with rows waiting and possibly before its wait ends.
+- Each call updates its reader under a short per-reader lock (never across the wait). If the lock
+  stays busy for 3 seconds the call gets 409 `READER_BUSY`; retry it.
 - `since=<ISO datetime>` without a reader returns `{more, results}` from that time on.
 - `wait=0..25` holds the request until rows come, checking about once a second. Under the ASGI
   worker a held request takes a thread, not the worker.

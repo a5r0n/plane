@@ -8,12 +8,14 @@ import hashlib
 import secrets
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import timedelta, timezone as dt_timezone
 
 from django.core.cache import cache
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from redis.exceptions import LockNotOwnedError
 from rest_framework import serializers, status
 from rest_framework.response import Response
 
@@ -26,6 +28,8 @@ READER_TTL = 600  # seconds; refreshed on every call
 MAX_WAIT = 25
 MAX_PER_PAGE = 100
 POLL_INTERVAL = 1.0
+LOCK_TIMEOUT = 5  # seconds; frees a reader whose worker died mid-update
+LOCK_WAIT = 3
 
 
 class FeedSerializer(ActivitySerializer):
@@ -162,26 +166,47 @@ class WorkspaceActivityFeedEndpoint(BaseAPIView):
         ids = self.hold(wait, poll)
         return Response({"more": len(ids) > per_page, "results": self.serialize(ids[:per_page])})
 
-    def load_reader(self, request, reader):
-        if reader == "new":
-            token = secrets.token_urlsafe(24)
-            return token, {"token": token_hash(request), "user": str(request.user.id), "acked": {}, "batch": None}
-        record = cache.get(reader_key(reader))
-        if record is None:
-            raise FeedError("READER_GONE", "Unknown or expired reader; start a new one.", status.HTTP_410_GONE)
-        if record["token"] != token_hash(request) or record["user"] != str(request.user.id):
-            raise FeedError("READER_FORBIDDEN", "This reader belongs to another API token.", status.HTTP_403_FORBIDDEN)
-        return reader, record
+    @contextmanager
+    def locked(self, reader):
+        """Serialise each read-then-write of a reader's record; never held across the wait."""
+        lock = cache.lock(f"{reader_key(reader)}:lock", timeout=LOCK_TIMEOUT, blocking_timeout=LOCK_WAIT)
+        if not lock.acquire():
+            raise FeedError("READER_BUSY", "Another call on this reader is busy; try again.", status.HTTP_409_CONFLICT)
+        try:
+            yield
+        finally:
+            try:
+                lock.release()
+            except LockNotOwnedError:
+                pass
 
-    def read_as_reader(self, request, rows, reader, wait, per_page):
-        reader, record = self.load_reader(request, reader)
-        ack = request.query_params.get("ack")
+    def enter(self, request, reader, ack):
+        """Load the reader, apply the ack and stamp the record as this call's."""
+        if reader == "new":
+            reader = secrets.token_urlsafe(24)
+            record = {"token": token_hash(request), "user": str(request.user.id), "acked": {}, "batch": None}
+            return reader, self.stamp(reader, record, None)
+        with self.locked(reader):
+            record = cache.get(reader_key(reader))
+            if record is None:
+                raise FeedError("READER_GONE", "Unknown or expired reader; start a new one.", status.HTTP_410_GONE)
+            if record["token"] != token_hash(request) or record["user"] != str(request.user.id):
+                raise FeedError(
+                    "READER_FORBIDDEN", "This reader belongs to another API token.", status.HTTP_403_FORBIDDEN
+                )
+            return reader, self.stamp(reader, record, ack)
+
+    def stamp(self, reader, record, ack):
         batch = record.get("batch")
         if ack and batch and ack == batch["id"]:
             record["acked"].update(batch["keys"])
             record["batch"] = None
-        call = record["call"] = secrets.token_urlsafe(8)
+        record["call"] = secrets.token_urlsafe(8)
         cache.set(reader_key(reader), record, READER_TTL)
+        return record
+
+    def read_as_reader(self, request, rows, reader, wait, per_page):
+        reader, record = self.enter(request, reader, request.query_params.get("ack"))
 
         def poll():
             start = timezone.now() - WINDOW
@@ -195,24 +220,24 @@ class WorkspaceActivityFeedEndpoint(BaseAPIView):
             return undelivered[: per_page + 1]
 
         pending = self.hold(wait, poll)
-        # a newer call on this reader took over while we held: its state wins
-        latest = cache.get(reader_key(reader))
-        if latest is None or latest.get("call") != call:
-            return Response({"reader": reader, "batch": None, "more": False, "results": []})
         page = pending[:per_page]
-
-        # forget acks for rows that have left the window
-        cutoff = (timezone.now() - WINDOW).timestamp()
-        record["acked"] = {key: at for key, at in record["acked"].items() if at >= cutoff}
-        if page:
-            batch = {
-                "id": secrets.token_urlsafe(16),
-                "keys": {row_key(row_id, created_at): created_at.timestamp() for row_id, created_at in page},
-            }
-        else:
-            batch = None
-        record["batch"] = batch
-        cache.set(reader_key(reader), record, READER_TTL)
+        with self.locked(reader):
+            # a newer call on this reader took over while we held: its state wins
+            latest = cache.get(reader_key(reader))
+            if latest is None or latest.get("call") != record["call"]:
+                return Response({"reader": reader, "batch": None, "more": False, "results": []})
+            # forget acks for rows that have left the window
+            cutoff = (timezone.now() - WINDOW).timestamp()
+            record["acked"] = {key: at for key, at in record["acked"].items() if at >= cutoff}
+            if page:
+                batch = {
+                    "id": secrets.token_urlsafe(16),
+                    "keys": {row_key(row_id, created_at): created_at.timestamp() for row_id, created_at in page},
+                }
+            else:
+                batch = None
+            record["batch"] = batch
+            cache.set(reader_key(reader), record, READER_TTL)
         return Response(
             {
                 "reader": reader,

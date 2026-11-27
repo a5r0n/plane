@@ -4,6 +4,7 @@
 
 import asyncio
 import json
+import threading
 import time
 from datetime import timedelta
 from urllib.parse import urlencode
@@ -12,11 +13,13 @@ import pytest
 from asgiref.sync import sync_to_async
 from asgiref.testing import ApplicationCommunicator
 from django.core.cache import cache
+from django.db import connections
 from django.urls import resolve
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import APIToken, IssueActivity, ProjectMember
+from plane.ext import feed as feed_module
 from plane.ext.feed import READER_TTL, WorkspaceActivityFeedEndpoint, reader_key
 from plane.ext.models import ActivityProvenance
 from plane.ext.tests.conftest import make_issue, make_project
@@ -367,3 +370,90 @@ class TestHeldRequests:
         quick_status, quick_elapsed, held_status, held_body, held_elapsed = asyncio.run(scenario())
         assert quick_status == 200 and quick_elapsed < 3.5
         assert held_status == 200 and held_body["results"] == [] and held_elapsed >= 5.5
+
+
+class GapCache:
+    """Starts other calls on a thread right after the Nth cache.get of a reader's record."""
+
+    def __init__(self, at, intrude):
+        self.at, self.intrude, self.gets = at, intrude, 0
+        self.thread, self.waited = None, None
+
+    def get(self, key, *args, **kwargs):
+        value = cache.get(key, *args, **kwargs)
+        if key.startswith("squadron:feed:reader:"):
+            self.gets += 1
+            if self.gets == self.at:
+                self.thread = threading.Thread(target=self.run)
+                self.thread.start()
+                self.thread.join(1.0)
+                self.waited = self.thread.is_alive()
+        return value
+
+    def run(self):
+        try:
+            self.intrude()
+        finally:
+            connections.close_all()
+
+    def __getattr__(self, name):
+        return getattr(cache, name)
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+class TestRecordLock:
+    @pytest.fixture
+    def thread_feed(self, workspace, api_token):
+        def call(**params):
+            client = APIClient()
+            client.credentials(HTTP_X_API_KEY=api_token.token)
+            response = client.get(f"/api/v1/workspaces/{workspace.slug}/activities/", params)
+            return response.status_code, response.json()
+
+        return call
+
+    def test_ack_landing_in_the_entry_gap_is_kept(self, feed, thread_feed, issue, monkeypatch):
+        row = add_row(issue)
+        _, first = feed(reader="new")
+        reader = first["reader"]
+        assert str(row.id) in ids(first)
+        gap = GapCache(1, lambda: thread_feed(reader=reader, ack=first["batch"]))
+        monkeypatch.setattr(feed_module, "cache", gap)
+        # a call that waits past the other call's entry, so that one isn't a stale ack
+        _, held = feed(reader=reader, wait=2, field="none")
+        gap.thread.join(10)
+        assert gap.waited and held["batch"] is None
+        monkeypatch.setattr(feed_module, "cache", cache)
+        _, after = feed(reader=reader)
+        assert str(row.id) not in ids(after)
+
+    def test_ack_landing_in_the_exit_gap_is_kept(self, feed, thread_feed, issue, monkeypatch):
+        _, first = feed(reader="new")
+        reader = first["reader"]
+        feed(reader=reader, ack=first["batch"])
+        row = add_row(issue)
+
+        def deliver_then_ack():
+            _, page = thread_feed(reader=reader)
+            thread_feed(reader=reader, ack=page["batch"])
+
+        gap = GapCache(2, deliver_then_ack)
+        monkeypatch.setattr(feed_module, "cache", gap)
+        feed(reader=reader)
+        gap.thread.join(10)
+        assert gap.waited
+        monkeypatch.setattr(feed_module, "cache", cache)
+        _, after = feed(reader=reader)
+        assert str(row.id) not in ids(after)
+
+    def test_busy_reader_gets_409(self, feed, issue, monkeypatch):
+        _, first = feed(reader="new")
+        monkeypatch.setattr(feed_module, "LOCK_WAIT", 0.2)
+        lock = cache.lock(f"{reader_key(first['reader'])}:lock", timeout=5)
+        assert lock.acquire()
+        try:
+            status, body = feed(reader=first["reader"])
+        finally:
+            lock.release()
+        assert status == 409 and body["code"] == "READER_BUSY"
